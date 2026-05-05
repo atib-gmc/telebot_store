@@ -34,14 +34,13 @@ export function registerTextHandler(bot, userData, setorSessions) {
     console.log('==================\n');
 
     if (setorSessions && setorSessions.has(userId)) {
-      setorSessions.delete(userId);
 
       const parts = text.split(';');
       if (parts.length !== 2) {
         return ctx.reply(
           `❌ *Format salah!*\n\n` +
-          `Gunakan format: \`accountid;level\`\n` +
-          `Contoh: \`acc12345;Gold III\``,
+          `Gunakan format: \`gmail;password\`\n` +
+          `Contoh: \`example@gmail.com;examplepassword\``,
           { parse_mode: 'Markdown' }
         );
       }
@@ -53,7 +52,7 @@ export function registerTextHandler(bot, userData, setorSessions) {
         return ctx.reply(
           `❌ *Format salah!*\n\n` +
           `Account ID dan level tidak boleh kosong.\n` +
-          `Gunakan format: \`accountid;level\``,
+          `Gunakan format: \`gmail;password\``,
           { parse_mode: 'Markdown' }
         );
       }
@@ -61,18 +60,20 @@ export function registerTextHandler(bot, userData, setorSessions) {
       try {
         const data = await upsertGameAccount(accountId, level);
 
+        setorSessions.delete(userId);
+
         if (data.isNew) {
           await ctx.reply(
             `✅ *Akun baru berhasil disetor!*\n\n` +
-            `• Account ID: \`${data.account_id}\`\n` +
-            `• Level: \`${data.level}\``,
+            `• email: \`${data.account_id}\`\n` +
+            `• password: \`${data.level}\``,
             { parse_mode: 'Markdown' }
           );
         } else {
           await ctx.reply(
-            `🔄 *Akun sudah ada, level diperbarui!*\n\n` +
-            `• Account ID: \`${data.account_id}\`\n` +
-            `• Level baru: \`${data.level}\``,
+            `🔄 *Akun sudah ada, password diperbarui!*\n\n` +
+            `• email ID: \`${data.account_id}\`\n` +
+            `• password baru: \`${data.level}\``,
             { parse_mode: 'Markdown' }
           );
         }

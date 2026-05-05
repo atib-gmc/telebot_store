@@ -5,9 +5,9 @@ export function registerSetor(bot, setorSessions) {
     await ctx.reply(
       `📥 *Setor Akun Game*\n\n` +
       `Masukkan data akun dengan format:\n` +
-      `\`accountid;level\`\n\n` +
+      `\`gmail;password\`\n\n` +
       `*Contoh:*\n` +
-      `\`acc12345;Gold III\`\n\n` +
+      `\`example@gmail.com;examplepassword\`\n\n` +
       `Ketik /cancel untuk membatalkan.`,
       { parse_mode: 'Markdown' }
     );
