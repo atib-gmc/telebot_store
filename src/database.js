@@ -126,3 +126,37 @@ export async function getUserGameAccounts(userId) {
   if (error) throw error;
   return data || [];
 }
+
+// ===== Cek apakah user adalah admin =====
+export function isAdmin(userId) {
+  const adminIds = [
+    process.env.ADMIN_ID_1,
+    process.env.ADMIN_ID_2
+  ].filter(Boolean).map(id => parseInt(id));
+  
+  return adminIds.includes(userId);
+}
+
+// ===== Ambil semua game accounts =====
+export async function getAllGameAccounts() {
+  const { data, error } = await supabase
+    .from('game_accounts')
+    .select('id, email, level, authenticator, status, user_id')
+    .order('id', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// ===== Update status akun =====
+export async function updateAccountStatus(accountId, status) {
+  const { data, error } = await supabase
+    .from('game_accounts')
+    .update({ status })
+    .eq('id', accountId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}

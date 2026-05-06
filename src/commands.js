@@ -1,5 +1,5 @@
 import { Markup } from 'telegraf';
-import { ensureUserExists, getUserProfile, getUserGameAccounts } from './database.js';
+import { ensureUserExists, getUserProfile, getUserGameAccounts, getAllGameAccounts, updateAccountStatus, isAdmin } from './database.js';
 import { userData } from './state.js';
 
 function buildMainMenu() {
@@ -95,7 +95,7 @@ Pilih command di bawah ini:
     });
 
     await ctx.reply(
-      `📥 *Setor Akun Game*\n\n` +
+      `📥 *Setor Email*\n\n` +
       `*Step 1/2:* Kirim email dan password:\n` +
       `Format: \`gmail;password\`\n\n` +
       `Contoh: \`example@gmail.com;mypassword\`\n\n` +
@@ -114,6 +114,67 @@ Pilih command di bawah ini:
       await ctx.reply('❌ Proses setor dibatalkan.');
     } else {
       await ctx.reply('Tidak ada proses yang sedang berjalan.');
+    }
+  });
+
+  // /admin - Admin panel untuk manage semua akun
+  bot.command('admin', async (ctx) => {
+    if (!isAdmin(ctx.from.id)) {
+      return ctx.reply('❌ Akses ditolak. Hanya untuk admin.');
+    }
+
+    try {
+      const accounts = await getAllGameAccounts();
+
+      if (accounts.length === 0) {
+        return ctx.reply('📭 Belum ada akun yang disetor.');
+      }
+
+      let message = `📋 *Admin Panel — ${accounts.length} Akun*\n\n`;
+
+      accounts.forEach(acc => {
+        const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
+        message += `*#${acc.id}* | \`${acc.email}\` | ${statusEmoji} *${acc.status}*\n`;
+        message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || '-'}\`\n\n`;
+      });
+
+      const buttons = accounts.map(acc => {
+        return [
+          Markup.button.callback('✅ Approve', `admin:approve:${acc.id}`),
+          Markup.button.callback('❌ Reject', `admin:reject:${acc.id}`)
+        ];
+      });
+
+      await ctx.reply(message, {
+        parse_mode: 'Markdown',
+        reply_markup: Markup.inlineKeyboard(buttons).reply_markup
+      });
+    } catch (err) {
+      console.error('Error in /admin:', err);
+      await ctx.reply('❌ Gagal memuat data admin.');
+    }
+  });
+
+  // Handle callback dari tombol approve/reject
+  bot.action(/admin:(approve|reject):(.+)/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) {
+      return ctx.answerCbQuery('❌ Akses ditolak.');
+    }
+
+    const [, action, accountId] = ctx.match;
+    const status = action === 'approve' ? 'approved' : 'rejected';
+
+    try {
+      await updateAccountStatus(parseInt(accountId), status);
+      await ctx.answerCbQuery(`✅ Akun ${action === 'approve' ? 'disetujui' : 'ditolak'}!`);
+
+      await ctx.reply(
+        `✅ Akun #${accountId} berhasil di-*${status}*!`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (err) {
+      console.error('Error updating status:', err);
+      await ctx.answerCbQuery('❌ Gagal update status.');
     }
   });
 
