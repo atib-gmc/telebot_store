@@ -1,3 +1,4 @@
+import { isValidGmail } from '../helpers/helper.js';
 import { ensureUserExists, upsertGameAccount, updateAccountPrice } from './database.js';
 import { userData, setorSessions } from './state.js';
 
@@ -58,8 +59,15 @@ export function registerTextHandler(bot) {
 
         const accountId = parts[0].trim();
         const level = parts[1].trim();
-
+        const isEmail = isValidGmail(accountId);
         // Email dan password tidak boleh kosong
+        if (!isEmail) {
+          return ctx.reply(
+            `❌ *Format email salah!*\n\n` +
+            'gunakan format email yg benar exampleemail@gmail.com',
+            { parse_mode: 'Markdown' }
+          )
+        }
         if (!accountId || !level) {
           return ctx.reply(
             `❌ *Format salah!*\n\n` +
