@@ -138,11 +138,17 @@ export function isAdmin(userId) {
 }
 
 // ===== Ambil semua game accounts =====
-export async function getAllGameAccounts() {
-  const { data, error } = await supabase
+export async function getAllGameAccounts(statusFilter = null) {
+  let query = supabase
     .from('game_accounts')
     .select('id, email, level, authenticator, status, user_id')
     .order('id', { ascending: false });
+
+  if (statusFilter && statusFilter !== 'all') {
+    query = query.eq('status', statusFilter);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return data || [];

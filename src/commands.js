@@ -123,14 +123,33 @@ Pilih command di bawah ini:
       return ctx.reply('❌ Akses ditolak. Hanya untuk admin.');
     }
 
+    const buttons = Markup.inlineKeyboard([
+      [Markup.button.callback('📋 Semua Email', 'admin:filter:all')],
+      [Markup.button.callback('⏳ Pending', 'admin:filter:pending')],
+      [Markup.button.callback('✅ Approved', 'admin:filter:approved')],
+      [Markup.button.callback('❌ Rejected', 'admin:filter:rejected')]
+    ]);
+
+    await ctx.reply('📋 *Admin Panel*\n\nPilih kategori:', {
+      parse_mode: 'Markdown',
+      ...buttons
+    });
+  });
+
+  // Handle filter callback
+  bot.action(/^admin:filter:(all|pending|approved|rejected)$/, async (ctx) => {
+    const filter = ctx.match[1];
+    const editable = filter === 'all' || filter === 'pending';
+
     try {
-      const accounts = await getAllGameAccounts();
+      const accounts = await getAllGameAccounts(filter);
 
       if (accounts.length === 0) {
-        return ctx.reply('📭 Belum ada akun yang disetor.');
+        return ctx.answerCbQuery('📭 Tidak ada akun.');
       }
 
-      let message = `📋 *Admin Panel — ${accounts.length} Akun*\n\n`;
+      const labels = { all: 'Semua', pending: 'Pending', approved: 'Approved', rejected: 'Rejected' };
+      let message = `📋 *${labels[filter]} — ${accounts.length} Akun*\n\n`;
 
       accounts.forEach(acc => {
         const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
@@ -138,29 +157,46 @@ Pilih command di bawah ini:
         message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || '-'}\`\n\n`;
       });
 
-      const buttons = accounts.map(acc => {
-        return [
-          Markup.button.callback('✅ Approve', `admin:approve:${acc.id}`),
-          Markup.button.callback('❌ Reject', `admin:reject:${acc.id}`)
-        ];
-      });
+      let actionButtons = [];
 
-      await ctx.reply(message, {
+      if (editable) {
+        actionButtons = accounts.map(acc => {
+          return [
+            Markup.button.callback(`✅ Approve #${acc.id}`, `admin:approve:${acc.id}`),
+            Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`)
+          ];
+        });
+      }
+
+      actionButtons.push([Markup.button.callback('🔙 Kembali', 'admin:back')]);
+
+      await ctx.editMessageText(message, {
         parse_mode: 'Markdown',
-        reply_markup: Markup.inlineKeyboard(buttons).reply_markup
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup
       });
     } catch (err) {
-      console.error('Error in /admin:', err);
-      await ctx.reply('❌ Gagal memuat data admin.');
+      console.error('Error in admin filter:', err);
+      await ctx.answerCbQuery('❌ Gagal memuat data.');
     }
   });
 
-  // Handle callback dari tombol approve/reject
-  bot.action(/admin:(approve|reject):(.+)/, async (ctx) => {
-    if (!isAdmin(ctx.from.id)) {
-      return ctx.answerCbQuery('❌ Akses ditolak.');
-    }
+  // Handle back to menu
+  bot.action('admin:back', async (ctx) => {
+    const buttons = Markup.inlineKeyboard([
+      [Markup.button.callback('📋 Semua Email', 'admin:filter:all')],
+      [Markup.button.callback('⏳ Pending', 'admin:filter:pending')],
+      [Markup.button.callback('✅ Approved', 'admin:filter:approved')],
+      [Markup.button.callback('❌ Rejected', 'admin:filter:rejected')]
+    ]);
 
+    await ctx.editMessageText('📋 *Admin Panel*\n\nPilih kategori:', {
+      parse_mode: 'Markdown',
+      ...buttons
+    });
+  });
+
+  // Handle callback dari tombol approve/reject
+  bot.action(/^admin:(approve|reject):(.+)$/, async (ctx) => {
     const [, action, accountId] = ctx.match;
     const status = action === 'approve' ? 'approved' : 'rejected';
 
@@ -168,10 +204,39 @@ Pilih command di bawah ini:
       await updateAccountStatus(parseInt(accountId), status);
       await ctx.answerCbQuery(`✅ Akun ${action === 'approve' ? 'disetujui' : 'ditolak'}!`);
 
-      await ctx.reply(
-        `✅ Akun #${accountId} berhasil di-*${status}*!`,
-        { parse_mode: 'Markdown' }
-      );
+      // Go back to pending filter view
+      const pending = await getAllGameAccounts('pending');
+
+      if (pending.length === 0) {
+        return ctx.editMessageText('📭 *Tidak ada akun pending*', {
+          parse_mode: 'Markdown',
+          reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback('🔙 Kembali', 'admin:back')]
+          ]).reply_markup
+        });
+      }
+
+      let message = `📋 *Pending — ${pending.length} Akun*\n\n`;
+
+      pending.forEach(acc => {
+        const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
+        message += `*#${acc.id}* | \`${acc.email}\` | ${statusEmoji} *${acc.status}*\n`;
+        message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || '-'}\`\n\n`;
+      });
+
+      const actionButtons = pending.map(acc => {
+        return [
+          Markup.button.callback(`✅ Approve #${acc.id}`, `admin:approve:${acc.id}`),
+          Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`)
+        ];
+      });
+
+      actionButtons.push([Markup.button.callback('🔙 Kembali', 'admin:back')]);
+
+      await ctx.editMessageText(message, {
+        parse_mode: 'Markdown',
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup
+      });
     } catch (err) {
       console.error('Error updating status:', err);
       await ctx.answerCbQuery('❌ Gagal update status.');
