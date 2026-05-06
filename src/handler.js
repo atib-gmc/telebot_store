@@ -57,9 +57,9 @@ export function registerTextHandler(bot) {
           );
         }
 
-        const accountId = parts[0].trim();
+        const email = parts[0].trim();
         const level = parts[1].trim();
-        const isEmail = isValidGmail(accountId);
+        const isEmail = isValidGmail(email);
         // Email dan password tidak boleh kosong
         if (!isEmail) {
           return ctx.reply(
@@ -68,7 +68,7 @@ export function registerTextHandler(bot) {
             { parse_mode: 'Markdown' }
           )
         }
-        if (!accountId || !level) {
+        if (!email || !level) {
           return ctx.reply(
             `❌ *Format salah!*\n\n` +
             `Email dan password tidak boleh kosong.`,
@@ -78,20 +78,20 @@ export function registerTextHandler(bot) {
 
         try {
           // Simpan akun ke database (baru atau update)
-          const data = await upsertGameAccount(accountId, level);
+          const data = await upsertGameAccount(email, level, userId);
 
           // Update session ke step berikutnya
           // Sekarang session tau: user sudah kirim akun, tinggal tanya harga
           setorSessions.set(userId, {
             step: 'authenticator',              // pindah ke step harga
-            accountId: accountId,       // simpan email untuk nanti
+            email,
             level: level,               // simpan password untuk nanti
             isNew: data.isNew           // flag: akun baru atau update
           });
 
           await ctx.reply(
             `✅ Akun berhasil disetor!\n\n` +
-            `• Email: \`${accountId}\`\n` +
+            `• Email: \`${email}\`\n` +
             `• Password: \`${level}\`\n\n` +
             `*Masukan Kunci Rahasia 2FA,Bila tidak mengerti dimana mendapatkan Kunci Rahasia 2FA ikuti panduan video ini*\n\n` +
             `Ketik /cancel untuk batal.`,
@@ -120,7 +120,7 @@ export function registerTextHandler(bot) {
 
         try {
           // Update harga ke database pakai accountId yang disimpan di step sebelumnya
-          await updateAccountPrice(session.accountId, price);
+          await updateAccountPrice(session.email, price);
 
           // Hapus session karena proses setor sudah selesai total
           // User sekarang keluar dari mode setor
@@ -128,7 +128,7 @@ export function registerTextHandler(bot) {
 
           await ctx.reply(
             `✅ *Akun selesai disetor!*\n\n` +
-            `• Email: \`${session.accountId}\`\n` +
+            `• Email: \`${session.email}\`\n` +
             `• Password: \`${session.level}\`\n` +
             // `• Harga: \`${price.toLocaleString('id-ID')}\`\n\n` +
             `${session.isNew ? ' Akun baru berhasil ditambahkan dan akan ditinjau oleh admin ' : '🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin'}`,

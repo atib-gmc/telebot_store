@@ -57,12 +57,12 @@ export async function ensureUserExists(ctx) {
 // ===== Simpan/update game account =====
 // Fungsi ini menyimpan akun game ke tabel game_accounts
 // Kalau akun sudah ada → update password, kalau belum → insert baru
-export async function upsertGameAccount(accountId, level) {
+export async function upsertGameAccount(email, level, userId) {
   // Step 1: Cek apakah akun sudah ada di database
   const { data: existing } = await supabase
     .from('game_accounts')
     .select('id')
-    .eq('account_id', accountId)
+    .eq('email', email)
     .single();
 
   // Step 2: Kalau sudah ada → update password/level
@@ -70,7 +70,7 @@ export async function upsertGameAccount(accountId, level) {
     const { data, error } = await supabase
       .from('game_accounts')
       .update({ level })
-      .eq('account_id', accountId)
+      .eq('email', email)
       .select()
       .single();
 
@@ -81,7 +81,7 @@ export async function upsertGameAccount(accountId, level) {
   // Step 3: Kalau belum ada → insert sebagai akun baru
   const { data, error } = await supabase
     .from('game_accounts')
-    .insert({ account_id: accountId, level })
+    .insert({ email, level, user_id: userId, status: "pending" })
     .select()
     .single();
 
@@ -92,14 +92,37 @@ export async function upsertGameAccount(accountId, level) {
 // ===== Update harga akun =====
 // Fungsi ini dipanggil di step 2 proses setor
 // Setelah user kirim harga, fungsi ini update kolom price di game_accounts
-export async function updateAccountPrice(accountId, price) {
+export async function updateAccountPrice(email, price) {
   const { data, error } = await supabase
     .from('game_accounts')
     .update({ authenticator: price })
-    .eq('account_id', accountId)
+    .eq('email', email)
     .select()
     .single();
 
   if (error) throw error;
   return data;
+}
+
+// ===== Ambil data user untuk profile =====
+export async function getUserProfile(userId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ===== Ambil semua akun game user =====
+export async function getUserGameAccounts(userId) {
+  const { data, error } = await supabase
+    .from('game_accounts')
+    .select('email, status')
+    .eq('user_id', userId);
+
+  if (error) throw error;
+  return data || [];
 }

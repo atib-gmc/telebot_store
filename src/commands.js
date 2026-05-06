@@ -1,5 +1,15 @@
-import { ensureUserExists } from './database.js';
+import { Markup } from 'telegraf';
+import { ensureUserExists, getUserProfile, getUserGameAccounts } from './database.js';
 import { userData } from './state.js';
+
+function buildMainMenu() {
+  return Markup.keyboard([
+    ['/setor'],
+    ['/cancel'],
+    ['/myprofile'],
+    ['/menu'],
+  ]).resize();
+}
 
 export function registerCommands(bot) {
 
@@ -15,9 +25,62 @@ export function registerCommands(bot) {
 • ID: ${ctx.from.id}
 • Username: ${ctx.from.username ? '@' + ctx.from.username : 'Tidak ada'}
 • Chat ID: ${ctx.chat.id}
-    `);
+
+Pilih command di bawah ini:
+    `, buildMainMenu());
   });
 
+  // /menu - Tampilkan menu utama dengan tombol
+  bot.command('menu', async (ctx) => {
+    await ctx.reply(
+      `📋 *Menu Utama*\n\n` +
+      `/setor — Setor email\n` +
+      `/cancel — Batalkan proses setor\n` +
+      `/myprofile — Lihat profil dan saldo Anda\n` +
+      `/menu — Tampilkan menu ini`,
+      {
+        parse_mode: 'Markdown',
+        ...buildMainMenu()
+      }
+    );
+  });
+
+  // /myprofile - Tampilkan profil user dan saldo
+  bot.command('myprofile', async (ctx) => {
+    try {
+      const profile = await getUserProfile(ctx.from.id);
+      const accounts = await getUserGameAccounts(ctx.from.id);
+
+      const balance = profile.balance ? Number(profile.balance).toLocaleString('id-ID') : '0';
+      const totalEmails = accounts.length;
+
+      let accountList = '';
+      if (totalEmails > 0) {
+        accountList = accounts.map((acc, i) => {
+          const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
+          return `${i + 1}. \`${acc.email}\` — ${statusEmoji} *${acc.status}*`;
+        }).join('\n');
+      } else {
+        accountList = '_Belum ada akun disetor_';
+      }
+
+      await ctx.reply(
+        `👤 *Profil Anda*\n\n` +
+        `• Nama: \`${profile.name}\`\n` +
+        `• Username: \`${profile.username ? '@' + profile.username : 'Tidak ada'}\`\n` +
+        `• Saldo: \`Rp ${balance}\`\n` +
+        `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString('id-ID')}\`\n\n` +
+        `📧 *Total Email (${totalEmails})*\n\n` +
+        `| Email | Status |\n` +
+        `|---|---|\n` +
+        accountList,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      await ctx.reply('❌ Gagal mengambil data profil. Coba lagi.');
+    }
+  });
 
   // /setor - Mulai proses setor akun game (2 step)
   // User harus lewat 2 tahap: (1) kirim akun, (2) kirim harga
@@ -49,6 +112,8 @@ export function registerCommands(bot) {
     if (setorSessions.has(ctx.from.id)) {
       setorSessions.delete(ctx.from.id);
       await ctx.reply('❌ Proses setor dibatalkan.');
+    } else {
+      await ctx.reply('Tidak ada proses yang sedang berjalan.');
     }
   });
 
