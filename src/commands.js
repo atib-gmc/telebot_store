@@ -1,10 +1,11 @@
 import { Markup } from 'telegraf';
-import { ensureUserExists, getUserProfile, getUserGameAccounts, getAllGameAccounts, updateAccountStatus, isAdmin } from './database.js';
+import { ensureUserExists, getUserProfile, getUserGameAccounts, getAllGameAccounts, updateAccountStatus, isAdmin, getUserPendingWithdrawals, getUserWithdrawalHistory } from './database.js';
 import { userData } from './state.js';
 
 function buildMainMenu() {
   return Markup.keyboard([
     ['/setor'],
+    ['/wd'],
     ['/cancel'],
     ['/myprofile'],
     ['/menu'],
@@ -35,7 +36,8 @@ Pilih command di bawah ini:
     await ctx.reply(
       `📋 *Menu Utama*\n\n` +
       `/setor — Setor email\n` +
-      `/cancel — Batalkan proses setor\n` +
+      `/wd — Withdraw saldo\n` +
+      `/cancel — Batalkan proses\n` +
       `/myprofile — Lihat profil dan saldo Anda\n` +
       `/menu — Tampilkan menu ini`,
       {
@@ -107,14 +109,134 @@ Pilih command di bawah ini:
   // /cancel - Batalkan mode setor
   // Kalau user ada di session, hapus session-nya
   bot.command('cancel', async (ctx) => {
-    const { setorSessions } = await import('./state.js');
+    const { setorSessions, wdSessions } = await import('./state.js');
+    const { refundUserBalance } = await import('./database.js');
 
     if (setorSessions.has(ctx.from.id)) {
       setorSessions.delete(ctx.from.id);
       await ctx.reply('❌ Proses setor dibatalkan.');
+    } else if (wdSessions.has(ctx.from.id)) {
+      const session = wdSessions.get(ctx.from.id);
+      if (session.refunded) {
+        wdSessions.delete(ctx.from.id);
+        await ctx.reply('Tidak ada proses yang sedang berjalan.');
+      } else {
+        try {
+          await refundUserBalance(ctx.from.id, session.amount);
+        } catch (err) {
+          console.error('Error refund balance:', err);
+        }
+        wdSessions.delete(ctx.from.id);
+        await ctx.reply('❌ Proses withdraw dibatalkan. Saldo telah dikembalikan.');
+      }
     } else {
       await ctx.reply('Tidak ada proses yang sedang berjalan.');
     }
+  });
+
+  bot.command('wd', async (ctx) => {
+    const { wdSessions } = await import('./state.js');
+
+    if (wdSessions.has(ctx.from.id)) {
+      return ctx.reply('⚠️ Anda sudah dalam proses withdraw. Ketik /cancel untuk membatalkan.');
+    }
+
+    const profile = await getUserProfile(ctx.from.id);
+    const balance = Number(profile.balance) || 0;
+
+    await ctx.reply(
+      `💰 *Withdraw Saldo*\n\n` +
+      `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n\n` +
+      `Pilih opsi di bawah:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('💸 WD Now', 'wd:now')],
+          [Markup.button.callback('📋 Cek Riwayat WD', 'wd:history')]
+        ])
+      }
+    );
+  });
+
+  bot.action('wd:now', async (ctx) => {
+    const { wdSessions } = await import('./state.js');
+
+    const profile = await getUserProfile(ctx.from.id);
+    const balance = Number(profile.balance) || 0;
+
+    if (balance < 10000) {
+      return ctx.answerCbQuery('❌ Saldo tidak mencukupi! Minimal WD Rp 10.000');
+    }
+
+    await ctx.deleteMessage();
+
+    wdSessions.set(ctx.from.id, {
+      step: 'account_name'
+    });
+
+    await ctx.reply(
+      `💰 *Withdraw Saldo*\n\n` +
+      `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n\n` +
+      `*Step 1/3:* Masukkan *Atas Nama* rekening Anda:\n\n` +
+      `Ketik /cancel untuk batal.`,
+      { parse_mode: 'Markdown' }
+    );
+  });
+
+  bot.action('wd:history', async (ctx) => {
+    const history = await getUserWithdrawalHistory(ctx.from.id);
+
+    if (history.length === 0) {
+      return ctx.answerCbQuery('📭 Belum ada riwayat withdraw.');
+    }
+
+    let message = `📋 *Riwayat Withdraw*\n\n`;
+
+    history.forEach((wd, i) => {
+      const statusEmoji = wd.status === 'pending' ? '⏳' : wd.status === 'approved' ? '✅' : '❌';
+      const date = new Date(wd.created_at).toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      message += `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n`;
+      message += `Nominal: \`Rp ${Number(wd.amount).toLocaleString('id-ID')}\`\n`;
+      message += `Tanggal: \`${date}\`\n\n`;
+    });
+
+    await ctx.editMessageText(message, {
+      parse_mode: 'Markdown',
+      reply_markup: Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 Kembali', 'wd:back')]
+      ]).reply_markup
+    });
+  });
+
+  bot.action('wd:back', async (ctx) => {
+    const { wdSessions } = await import('./state.js');
+
+    if (wdSessions.has(ctx.from.id)) {
+      return ctx.answerCbQuery('⚠️ Anda sedang dalam proses withdraw.');
+    }
+
+    const profile = await getUserProfile(ctx.from.id);
+    const balance = Number(profile.balance) || 0;
+
+    await ctx.editMessageText(
+      `💰 *Withdraw Saldo*\n\n` +
+      `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n\n` +
+      `Pilih opsi di bawah:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('💸 WD Now', 'wd:now')],
+          [Markup.button.callback('📋 Cek Riwayat WD', 'wd:history')]
+        ])
+      }
+    );
   });
 
   // /admin - Admin panel untuk manage semua akun

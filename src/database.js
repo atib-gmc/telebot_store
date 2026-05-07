@@ -166,3 +166,88 @@ export async function updateAccountStatus(accountId, status) {
   if (error) throw error;
   return data;
 }
+
+export async function getUserPendingWithdrawals(userId) {
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'pending');
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createWithdrawal(userId, accountName, accountNumber, amount) {
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .insert({
+      user_id: userId,
+      account_name: accountName,
+      account_number: accountNumber,
+      amount,
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deductUserBalance(userId, amount) {
+  const { data: user } = await supabase
+    .from('users')
+    .select('balance')
+    .eq('user_id', userId)
+    .single();
+
+  const currentBalance = Number(user.balance) || 0;
+  const newBalance = currentBalance - amount;
+
+  if (newBalance < 0) {
+    throw new Error('Saldo tidak mencukupi');
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ balance: newBalance })
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function refundUserBalance(userId, amount) {
+  const { data: user } = await supabase
+    .from('users')
+    .select('balance')
+    .eq('user_id', userId)
+    .single();
+
+  const currentBalance = Number(user.balance) || 0;
+  const newBalance = currentBalance + amount;
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ balance: newBalance })
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getUserWithdrawalHistory(userId) {
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}

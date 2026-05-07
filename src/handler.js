@@ -1,6 +1,6 @@
 import { isValidGmail } from '../helpers/helper.js';
-import { ensureUserExists, upsertGameAccount, updateAccountPrice } from './database.js';
-import { userData, setorSessions } from './state.js';
+import { ensureUserExists, upsertGameAccount, updateAccountPrice, createWithdrawal, deductUserBalance, refundUserBalance, getUserProfile } from './database.js';
+import { userData, setorSessions, wdSessions } from './state.js';
 
 // Track user setiap ada pesan masuk
 // Setiap user yang chat, datanya disimpan di memori (userData Map)
@@ -140,6 +140,97 @@ export function registerTextHandler(bot) {
         }
 
         return;
+      }
+    }
+
+    if (wdSessions.has(userId)) {
+      const session = wdSessions.get(userId);
+
+      if (session.step === 'account_name') {
+        if (text.trim().length < 2) {
+          return ctx.reply('❌ Nama terlalu pendek. Masukkan nama yang valid.');
+        }
+
+        wdSessions.set(userId, {
+          step: 'account_number',
+          account_name: text.trim()
+        });
+
+        return ctx.reply(
+          `✅ *Step 2/3:* Masukkan *Nomor Rekening* Anda:\n\n` +
+          `Ketik /cancel untuk batal.`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+
+      if (session.step === 'account_number') {
+        if (!/^\d+$/.test(text.trim())) {
+          return ctx.reply('❌ Format salah! Nomor rekening harus berupa angka.');
+        }
+
+        wdSessions.set(userId, {
+          step: 'amount',
+          account_name: session.account_name,
+          account_number: text.trim()
+        });
+
+        return ctx.reply(
+          `✅ *Step 3/3:* Masukkan *Nominal Withdraw*\n\n` +
+          `❗ Minimal withdraw: \`Rp 10.000\`\n\n` +
+          `Ketik /cancel untuk batal.`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+
+      if (session.step === 'amount') {
+        const amount = parseInt(text);
+
+        if (isNaN(amount) || amount < 10000) {
+          return ctx.reply(
+            `❌ *Nominal tidak valid!*\n\n` +
+            `Minimal withdraw adalah \`Rp 10.000\`.`,
+            { parse_mode: 'Markdown' }
+          );
+        }
+
+        const profile = await getUserProfile(userId);
+        const balance = Number(profile.balance) || 0;
+
+        if (balance < amount) {
+          return ctx.reply(
+            `❌ *Saldo tidak mencukupi!*\n\n` +
+            `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n` +
+            `Nominal withdraw: \`Rp ${amount.toLocaleString('id-ID')}\`\n\n` +
+            `Ketik /cancel untuk batal.`,
+            { parse_mode: 'Markdown' }
+          );
+        }
+
+        try {
+          await deductUserBalance(userId, amount);
+
+          await createWithdrawal(
+            userId,
+            session.account_name,
+            session.account_number,
+            amount
+          );
+
+          wdSessions.set(userId, { ...session, amount, refunded: false });
+
+          return ctx.reply(
+            `✅ *Withdraw Berhasil Dibuat!*\n\n` +
+            `• Atas Nama: \`${session.account_name}\`\n` +
+            `• Nomor Rekening: \`${session.account_number}\`\n` +
+            `• Nominal: \`Rp ${amount.toLocaleString('id-ID')}\`\n` +
+            `• Status: ⏳ *pending*\n\n` +
+            `Saldo Anda telah dikurangi. Withdraw sedang diproses oleh admin. Harap tunggu.`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (err) {
+          console.error('Error creating withdrawal:', err);
+          return ctx.reply(`❌ ${err.message || 'Gagal membuat withdraw. Coba lagi.'}`);
+        }
       }
     }
 
