@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
 dotenv.config();
 
 // ===== SETUP SUPABASE =====
@@ -8,7 +8,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+  throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
 }
 
 // Buat client Supabase untuk query database
@@ -20,29 +20,27 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 export async function ensureUserExists(ctx) {
   const userId = ctx.from.id;
   const firstName = ctx.from.first_name;
-  const lastName = ctx.from.last_name || '';
+  const lastName = ctx.from.last_name || "";
   const username = ctx.from.username;
   const fullName = `${firstName} ${lastName}`.trim();
 
   // Coba cari user di database
   const { data, error } = await supabase
-    .from('users')
-    .select('user_id')
-    .eq('user_id', userId)
+    .from("users")
+    .select("user_id")
+    .eq("user_id", userId)
     .single();
 
   // PGRST116 = tidak ditemukan, berarti user baru → insert
-  if (error && error.code === 'PGRST116') {
-    const { error: insertError } = await supabase
-      .from('users')
-      .insert({
-        user_id: userId,
-        name: fullName,
-        username: username || null,
-      });
+  if (error && error.code === "PGRST116") {
+    const { error: insertError } = await supabase.from("users").insert({
+      user_id: userId,
+      name: fullName,
+      username: username || null,
+    });
 
     if (insertError) {
-      console.error('Error insert user:', insertError);
+      console.error("Error insert user:", insertError);
     } else {
       console.log(`User baru: ${fullName} (${userId})`);
     }
@@ -50,7 +48,7 @@ export async function ensureUserExists(ctx) {
   }
 
   if (error) {
-    console.error('Error check user:', error);
+    console.error("Error check user:", error);
   }
 }
 
@@ -60,17 +58,17 @@ export async function ensureUserExists(ctx) {
 export async function upsertGameAccount(email, level, userId) {
   // Step 1: Cek apakah akun sudah ada di database
   const { data: existing } = await supabase
-    .from('game_accounts')
-    .select('id')
-    .eq('email', email)
+    .from("game_accounts")
+    .select("id")
+    .eq("email", email)
     .single();
 
   // Step 2: Kalau sudah ada → update password/level
   if (existing) {
     const { data, error } = await supabase
-      .from('game_accounts')
+      .from("game_accounts")
       .update({ level })
-      .eq('email', email)
+      .eq("email", email)
       .select()
       .single();
 
@@ -80,7 +78,7 @@ export async function upsertGameAccount(email, level, userId) {
 
   // Step 3: Kalau belum ada → insert sebagai akun baru
   const { data, error } = await supabase
-    .from('game_accounts')
+    .from("game_accounts")
     .insert({ email, level, user_id: userId, status: "pending" })
     .select()
     .single();
@@ -94,9 +92,9 @@ export async function upsertGameAccount(email, level, userId) {
 // Setelah user kirim harga, fungsi ini update kolom price di game_accounts
 export async function updateAccountPrice(email, price) {
   const { data, error } = await supabase
-    .from('game_accounts')
+    .from("game_accounts")
     .update({ authenticator: price })
-    .eq('email', email)
+    .eq("email", email)
     .select()
     .single();
 
@@ -106,11 +104,7 @@ export async function updateAccountPrice(email, price) {
 
 // ===== Ambil data user untuk profile =====
 export async function getUserProfile(userId) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  const { data, error } = await supabase.from("users").select("*").eq("user_id", userId).single();
 
   if (error) throw error;
   return data;
@@ -119,9 +113,9 @@ export async function getUserProfile(userId) {
 // ===== Ambil semua akun game user =====
 export async function getUserGameAccounts(userId) {
   const { data, error } = await supabase
-    .from('game_accounts')
-    .select('email, status')
-    .eq('user_id', userId);
+    .from("game_accounts")
+    .select("email, status")
+    .eq("user_id", userId);
 
   if (error) throw error;
   return data || [];
@@ -129,23 +123,22 @@ export async function getUserGameAccounts(userId) {
 
 // ===== Cek apakah user adalah admin =====
 export function isAdmin(userId) {
-  const adminIds = [
-    process.env.ADMIN_ID_1,
-    process.env.ADMIN_ID_2
-  ].filter(Boolean).map(id => parseInt(id));
-  
+  const adminIds = [process.env.ADMIN_ID_1, process.env.ADMIN_ID_2]
+    .filter(Boolean)
+    .map((id) => parseInt(id));
+
   return adminIds.includes(userId);
 }
 
 // ===== Ambil semua game accounts =====
 export async function getAllGameAccounts(statusFilter = null) {
   let query = supabase
-    .from('game_accounts')
-    .select('id, email, level, authenticator, status, user_id')
-    .order('id', { ascending: false });
+    .from("game_accounts")
+    .select("id, email, level, authenticator, status, user_id")
+    .order("id", { ascending: false });
 
-  if (statusFilter && statusFilter !== 'all') {
-    query = query.eq('status', statusFilter);
+  if (statusFilter && statusFilter !== "all") {
+    query = query.eq("status", statusFilter);
   }
 
   const { data, error } = await query;
@@ -155,11 +148,18 @@ export async function getAllGameAccounts(statusFilter = null) {
 }
 
 // ===== Update status akun =====
-export async function updateAccountStatus(accountId, status) {
+export async function updateAccountStatus(accountId, status, userId) {
+  if (status.toLowerCase() === "approved") {
+    //tambahakan balance user
+    const { error: incrementError } = await supabase.rpc("increment_balance", {
+      target_user_id: userId,
+      amount: 1500,
+    });
+  }
   const { data, error } = await supabase
-    .from('game_accounts')
+    .from("game_accounts")
     .update({ status })
-    .eq('id', accountId)
+    .eq("id", accountId)
     .select()
     .single();
 
@@ -169,10 +169,10 @@ export async function updateAccountStatus(accountId, status) {
 
 export async function getUserPendingWithdrawals(userId) {
   const { data, error } = await supabase
-    .from('withdrawals')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'pending');
+    .from("withdrawals")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "pending");
 
   if (error) throw error;
   return data || [];
@@ -180,13 +180,13 @@ export async function getUserPendingWithdrawals(userId) {
 
 export async function createWithdrawal(userId, accountName, accountNumber, amount) {
   const { data, error } = await supabase
-    .from('withdrawals')
+    .from("withdrawals")
     .insert({
       user_id: userId,
       account_name: accountName,
       account_number: accountNumber,
       amount,
-      status: 'pending',
+      status: "pending",
     })
     .select()
     .single();
@@ -197,22 +197,22 @@ export async function createWithdrawal(userId, accountName, accountNumber, amoun
 
 export async function deductUserBalance(userId, amount) {
   const { data: user } = await supabase
-    .from('users')
-    .select('balance')
-    .eq('user_id', userId)
+    .from("users")
+    .select("balance")
+    .eq("user_id", userId)
     .single();
 
   const currentBalance = Number(user.balance) || 0;
   const newBalance = currentBalance - amount;
 
   if (newBalance < 0) {
-    throw new Error('Saldo tidak mencukupi');
+    throw new Error("Saldo tidak mencukupi");
   }
 
   const { data, error } = await supabase
-    .from('users')
+    .from("users")
     .update({ balance: newBalance })
-    .eq('user_id', userId)
+    .eq("user_id", userId)
     .select()
     .single();
 
@@ -222,18 +222,18 @@ export async function deductUserBalance(userId, amount) {
 
 export async function refundUserBalance(userId, amount) {
   const { data: user } = await supabase
-    .from('users')
-    .select('balance')
-    .eq('user_id', userId)
+    .from("users")
+    .select("balance")
+    .eq("user_id", userId)
     .single();
 
   const currentBalance = Number(user.balance) || 0;
   const newBalance = currentBalance + amount;
 
   const { data, error } = await supabase
-    .from('users')
+    .from("users")
     .update({ balance: newBalance })
-    .eq('user_id', userId)
+    .eq("user_id", userId)
     .select()
     .single();
 
@@ -243,10 +243,10 @@ export async function refundUserBalance(userId, amount) {
 
 export async function getUserWithdrawalHistory(userId) {
   const { data, error } = await supabase
-    .from('withdrawals')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .from("withdrawals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
   return data || [];

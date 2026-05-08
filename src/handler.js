@@ -1,6 +1,13 @@
-import { isValidGmail } from '../helpers/helper.js';
-import { ensureUserExists, upsertGameAccount, updateAccountPrice, createWithdrawal, deductUserBalance, refundUserBalance, getUserProfile } from './database.js';
-import { userData, setorSessions, wdSessions } from './state.js';
+import { isValidGmail } from "../helpers/helper.js";
+import {
+  ensureUserExists,
+  upsertGameAccount,
+  updateAccountPrice,
+  createWithdrawal,
+  deductUserBalance,
+  getUserProfile,
+} from "./database.js";
+import { userData, setorSessions, wdSessions } from "./state.js";
 
 // Track user setiap ada pesan masuk
 // Setiap user yang chat, datanya disimpan di memori (userData Map)
@@ -14,7 +21,7 @@ function trackUser(ctx) {
       name: ctx.from.first_name,
       username: ctx.from.username,
       chat_id: ctx.chat.id,
-      messages_count: 0
+      messages_count: 0,
     });
   }
 
@@ -25,16 +32,15 @@ function trackUser(ctx) {
 }
 
 export function registerTextHandler(bot) {
-
   // Handler ini jalan setiap kali user kirim pesan teks
-  bot.on('text', async (ctx) => {
+  bot.on("text", async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text;
 
     // Step 1: Track user dan simpan ke database
     // Setiap pesan selalu update data tracking
     trackUser(ctx);
-    ensureUserExists(ctx).catch(err => console.error('DB error:', err));
+    ensureUserExists(ctx).catch((err) => console.error("DB error:", err));
 
     // Step 2: Cek apakah user sedang dalam mode setor
     // setorSessions berisi semua user yang sudah ketik /setor
@@ -44,16 +50,16 @@ export function registerTextHandler(bot) {
 
       // --- STEP A: Terima email;password ---
       // session.step === 'account' artinya user baru mulai setor, belum kirim data
-      if (session.step === 'account') {
-        const parts = text.split(';');
+      if (session.step === "account") {
+        const parts = text.split(";");
 
         // Format harus punya 2 bagian: email dan password
         if (parts.length !== 2) {
           return ctx.reply(
             `❌ *Format salah!*\n\n` +
-            `Gunakan format: \`gmail;password\`\n` +
-            `Contoh: \`example@gmail.com;mypassword\``,
-            { parse_mode: 'Markdown' }
+              `Gunakan format: \`gmail;password\`\n` +
+              `Contoh: \`example@gmail.com;mypassword\``,
+            { parse_mode: "Markdown" },
           );
         }
 
@@ -63,17 +69,14 @@ export function registerTextHandler(bot) {
         // Email dan password tidak boleh kosong
         if (!isEmail) {
           return ctx.reply(
-            `❌ *Format email salah!*\n\n` +
-            'gunakan format email yg benar exampleemail@gmail.com',
-            { parse_mode: 'Markdown' }
-          )
+            `❌ *Format email salah!*\n\n` + "gunakan format email yg benar exampleemail@gmail.com",
+            { parse_mode: "Markdown" },
+          );
         }
         if (!email || !level) {
-          return ctx.reply(
-            `❌ *Format salah!*\n\n` +
-            `Email dan password tidak boleh kosong.`,
-            { parse_mode: 'Markdown' }
-          );
+          return ctx.reply(`❌ *Format salah!*\n\n` + `Email dan password tidak boleh kosong.`, {
+            parse_mode: "Markdown",
+          });
         }
 
         try {
@@ -83,44 +86,41 @@ export function registerTextHandler(bot) {
           // Update session ke step berikutnya
           // Sekarang session tau: user sudah kirim akun, tinggal tanya harga
           setorSessions.set(userId, {
-            step: 'authenticator',              // pindah ke step harga
+            step: "authenticator", // pindah ke step harga
             email,
-            level: level,               // simpan password untuk nanti
-            isNew: data.isNew           // flag: akun baru atau update
+            level: level, // simpan password untuk nanti
+            isNew: data.isNew, // flag: akun baru atau update
           });
 
           await ctx.reply(
             `✅ Akun berhasil disetor!\n\n` +
-            `• Email: \`${email}\`\n` +
-            `• Password: \`${level}\`\n\n` +
-            `*Masukan Kunci Rahasia 2FA,Bila tidak mengerti dimana mendapatkan Kunci Rahasia 2FA ikuti panduan video ini*\n\n` +
-            `Ketik /cancel untuk batal.`,
-            { parse_mode: 'Markdown' }
+              `• Email: \`${email}\`\n` +
+              `• Password: \`${level}\`\n\n` +
+              `*Masukan Kunci Rahasia 2FA,Bila tidak mengerti dimana mendapatkan Kunci Rahasia 2FA ikuti panduan video ini*\n\n` +
+              `Ketik /cancel untuk batal.`,
+            { parse_mode: "Markdown" },
           );
         } catch (err) {
-          console.error('Error:', err);
-          return ctx.reply('❌ Terjadi kesalahan. Coba lagi.');
+          console.error("Error:", err);
+          return ctx.reply("❌ Terjadi kesalahan. Coba lagi.");
         }
         return; // Stop di sini, jangan lanjut ke handler biasa
       }
 
       // --- STEP B: Terima harga ---
       // session.step === 'price' artinya user sudah kirim akun, sekarang kirim harga
-      if (session.step === 'authenticator') {
-        const price = parseInt(text);
-
+      if (session.step === "authenticator") {
         // Harga harus angka dan lebih dari 0
-        if (isNaN(price) || price <= 0) {
+        if (!text || text.length < 10) {
           return ctx.reply(
-            `❌ *Format salah!*\n\n` +
-            `Kirim harga dalam angka (contoh: \`50000\`).`,
-            { parse_mode: 'Markdown' }
+            `❌ *Format salah!*\n\n` + `format salah harap isi authentikator dengan format benar`,
+            { parse_mode: "Markdown" },
           );
         }
 
         try {
           // Update harga ke database pakai accountId yang disimpan di step sebelumnya
-          await updateAccountPrice(session.email, price);
+          await updateAccountPrice(session.email, text);
 
           // Hapus session karena proses setor sudah selesai total
           // User sekarang keluar dari mode setor
@@ -128,15 +128,15 @@ export function registerTextHandler(bot) {
 
           await ctx.reply(
             `✅ *Akun selesai disetor!*\n\n` +
-            `• Email: \`${session.email}\`\n` +
-            `• Password: \`${session.level}\`\n` +
-            // `• Harga: \`${price.toLocaleString('id-ID')}\`\n\n` +
-            `${session.isNew ? ' Akun baru berhasil ditambahkan dan akan ditinjau oleh admin ' : '🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin'}`,
-            { parse_mode: 'Markdown' }
+              `• Email: \`${session.email}\`\n` +
+              `• Password: \`${session.level}\`\n` +
+              // `• Harga: \`${price.toLocaleString('id-ID')}\`\n\n` +
+              `${session.isNew ? " Akun baru berhasil ditambahkan dan akan ditinjau oleh admin " : "🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin"}`,
+            { parse_mode: "Markdown" },
           );
         } catch (err) {
-          console.error('Error:', err);
-          return ctx.reply('❌ Gagal menyimpan harga. Coba lagi.');
+          console.error("Error:", err);
+          return ctx.reply("❌ Gagal menyimpan harga. Coba lagi.");
         }
 
         return;
@@ -146,50 +146,48 @@ export function registerTextHandler(bot) {
     if (wdSessions.has(userId)) {
       const session = wdSessions.get(userId);
 
-      if (session.step === 'account_name') {
+      if (session.step === "account_name") {
         if (text.trim().length < 2) {
-          return ctx.reply('❌ Nama terlalu pendek. Masukkan nama yang valid.');
+          return ctx.reply("❌ Nama terlalu pendek. Masukkan nama yang valid.");
         }
 
         wdSessions.set(userId, {
-          step: 'account_number',
-          account_name: text.trim()
+          step: "account_number",
+          account_name: text.trim(),
         });
 
         return ctx.reply(
-          `✅ *Step 2/3:* Masukkan *Nomor Rekening* Anda:\n\n` +
-          `Ketik /cancel untuk batal.`,
-          { parse_mode: 'Markdown' }
+          `✅ *Step 2/3:* Masukkan *Nomor Rekening* Anda:\n\n` + `Ketik /cancel untuk batal.`,
+          { parse_mode: "Markdown" },
         );
       }
 
-      if (session.step === 'account_number') {
+      if (session.step === "account_number") {
         if (!/^\d+$/.test(text.trim())) {
-          return ctx.reply('❌ Format salah! Nomor rekening harus berupa angka.');
+          return ctx.reply("❌ Format salah! Nomor rekening harus berupa angka.");
         }
 
         wdSessions.set(userId, {
-          step: 'amount',
+          step: "amount",
           account_name: session.account_name,
-          account_number: text.trim()
+          account_number: text.trim(),
         });
 
         return ctx.reply(
           `✅ *Step 3/3:* Masukkan *Nominal Withdraw*\n\n` +
-          `❗ Minimal withdraw: \`Rp 10.000\`\n\n` +
-          `Ketik /cancel untuk batal.`,
-          { parse_mode: 'Markdown' }
+            `❗ Minimal withdraw: \`Rp 10.000\`\n\n` +
+            `Ketik /cancel untuk batal.`,
+          { parse_mode: "Markdown" },
         );
       }
 
-      if (session.step === 'amount') {
+      if (session.step === "amount") {
         const amount = parseInt(text);
 
         if (isNaN(amount) || amount < 10000) {
           return ctx.reply(
-            `❌ *Nominal tidak valid!*\n\n` +
-            `Minimal withdraw adalah \`Rp 10.000\`.`,
-            { parse_mode: 'Markdown' }
+            `❌ *Nominal tidak valid!*\n\n` + `Minimal withdraw adalah \`Rp 10.000\`.`,
+            { parse_mode: "Markdown" },
           );
         }
 
@@ -199,45 +197,40 @@ export function registerTextHandler(bot) {
         if (balance < amount) {
           return ctx.reply(
             `❌ *Saldo tidak mencukupi!*\n\n` +
-            `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n` +
-            `Nominal withdraw: \`Rp ${amount.toLocaleString('id-ID')}\`\n\n` +
-            `Ketik /cancel untuk batal.`,
-            { parse_mode: 'Markdown' }
+              `Saldo Anda: \`Rp ${balance.toLocaleString("id-ID")}\`\n` +
+              `Nominal withdraw: \`Rp ${amount.toLocaleString("id-ID")}\`\n\n` +
+              `Ketik /cancel untuk batal.`,
+            { parse_mode: "Markdown" },
           );
         }
 
         try {
+          await createWithdrawal(userId, session.account_name, session.account_number, amount);
+
           await deductUserBalance(userId, amount);
 
-          await createWithdrawal(
-            userId,
-            session.account_name,
-            session.account_number,
-            amount
-          );
-
-          wdSessions.set(userId, { ...session, amount, refunded: false });
+          wdSessions.delete(userId);
 
           return ctx.reply(
             `✅ *Withdraw Berhasil Dibuat!*\n\n` +
-            `• Atas Nama: \`${session.account_name}\`\n` +
-            `• Nomor Rekening: \`${session.account_number}\`\n` +
-            `• Nominal: \`Rp ${amount.toLocaleString('id-ID')}\`\n` +
-            `• Status: ⏳ *pending*\n\n` +
-            `Saldo Anda telah dikurangi. Withdraw sedang diproses oleh admin. Harap tunggu.`,
-            { parse_mode: 'Markdown' }
+              `• Atas Nama: \`${session.account_name}\`\n` +
+              `• Nomor Rekening: \`${session.account_number}\`\n` +
+              `• Nominal: \`Rp ${amount.toLocaleString("id-ID")}\`\n` +
+              `• Status: ⏳ *pending*\n\n` +
+              `Saldo Anda telah dikurangi. Withdraw sedang diproses oleh admin. Harap tunggu.`,
+            { parse_mode: "Markdown" },
           );
         } catch (err) {
-          console.error('Error creating withdrawal:', err);
-          return ctx.reply(`❌ ${err.message || 'Gagal membuat withdraw. Coba lagi.'}`);
+          console.error("Error creating withdrawal:", err);
+          return ctx.reply(`❌ ${err.message || "Gagal membuat withdraw. Coba lagi."}`);
         }
       }
     }
 
     // Step 3: Handler untuk pesan biasa (bukan mode setor)
     // Kalau user TIDAK di setorSessions, pesannya diproses sebagai pesan biasa
-    if (!text.startsWith('/')) {
-      if (ctx.chat.type !== 'private') {
+    if (!text.startsWith("/")) {
+      if (ctx.chat.type !== "private") {
         // Di grup: tampilkan siapa yang chat dan apa isinya
         ctx.reply(`${ctx.from.first_name} di grup ${ctx.chat.title}: ${text}`);
       } else {
@@ -246,5 +239,4 @@ export function registerTextHandler(bot) {
       }
     }
   });
-
 }

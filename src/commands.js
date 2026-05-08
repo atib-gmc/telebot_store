@@ -1,144 +1,140 @@
-import { Markup } from 'telegraf';
-import { ensureUserExists, getUserProfile, getUserGameAccounts, getAllGameAccounts, updateAccountStatus, isAdmin, getUserPendingWithdrawals, getUserWithdrawalHistory } from './database.js';
-import { userData } from './state.js';
+import { Markup } from "telegraf";
+import {
+  ensureUserExists,
+  getUserProfile,
+  getUserGameAccounts,
+  getAllGameAccounts,
+  updateAccountStatus,
+  isAdmin,
+  getUserPendingWithdrawals,
+  getUserWithdrawalHistory,
+} from "./database.js";
+import { userData } from "./state.js";
 
 function buildMainMenu() {
-  return Markup.keyboard([
-    ['/setor'],
-    ['/wd'],
-    ['/cancel'],
-    ['/myprofile'],
-    ['/menu'],
-  ]).resize();
+  return Markup.keyboard([["/setor"], ["/wd"], ["/cancel"], ["/myprofile"], ["/menu"]]).resize();
 }
 
 export function registerCommands(bot) {
-
   // /start - Info user saat pertama kali pakai bot
   bot.start(async (ctx) => {
     // Simpan user ke database secara background (tidak tunggu)
-    ensureUserExists(ctx).catch(err => console.error('DB error:', err));
+    ensureUserExists(ctx).catch((err) => console.error("DB error:", err));
 
-    await ctx.reply(`
+    await ctx.reply(
+      `
 👋 Halo ${ctx.from.first_name}!
 
 📱 Info Anda:
 • ID: ${ctx.from.id}
-• Username: ${ctx.from.username ? '@' + ctx.from.username : 'Tidak ada'}
+• Username: ${ctx.from.username ? "@" + ctx.from.username : "Tidak ada"}
 • Chat ID: ${ctx.chat.id}
 
 Pilih command di bawah ini:
-    `, buildMainMenu());
+    `,
+      buildMainMenu(),
+    );
   });
 
   // /menu - Tampilkan menu utama dengan tombol
-  bot.command('menu', async (ctx) => {
+  bot.command("menu", async (ctx) => {
     await ctx.reply(
       `📋 *Menu Utama*\n\n` +
-      `/setor — Setor email\n` +
-      `/wd — Withdraw saldo\n` +
-      `/cancel — Batalkan proses\n` +
-      `/myprofile — Lihat profil dan saldo Anda\n` +
-      `/menu — Tampilkan menu ini`,
+        `/setor — Setor email\n` +
+        `/wd — Withdraw saldo\n` +
+        `/cancel — Batalkan proses\n` +
+        `/myprofile — Lihat profil dan saldo Anda\n` +
+        `/menu — Tampilkan menu ini`,
       {
-        parse_mode: 'Markdown',
-        ...buildMainMenu()
-      }
+        parse_mode: "Markdown",
+        ...buildMainMenu(),
+      },
     );
   });
 
   // /myprofile - Tampilkan profil user dan saldo
-  bot.command('myprofile', async (ctx) => {
+  bot.command("myprofile", async (ctx) => {
     try {
       const profile = await getUserProfile(ctx.from.id);
       const accounts = await getUserGameAccounts(ctx.from.id);
 
-      const balance = profile.balance ? Number(profile.balance).toLocaleString('id-ID') : '0';
+      const balance = profile.balance ? Number(profile.balance).toLocaleString("id-ID") : "0";
       const totalEmails = accounts.length;
 
-      let accountList = '';
+      let accountList = "";
       if (totalEmails > 0) {
-        accountList = accounts.map((acc, i) => {
-          const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
-          return `${i + 1}. \`${acc.email}\` — ${statusEmoji} *${acc.status}*`;
-        }).join('\n');
+        accountList = accounts
+          .map((acc, i) => {
+            const statusEmoji =
+              acc.status === "pending" ? "⏳" : acc.status === "approved" ? "✅" : "❌";
+            return `${i + 1}. \`${acc.email}\` — ${statusEmoji} *${acc.status}*`;
+          })
+          .join("\n");
       } else {
-        accountList = '_Belum ada akun disetor_';
+        accountList = "_Belum ada akun disetor_";
       }
 
       await ctx.reply(
         `👤 *Profil Anda*\n\n` +
-        `• Nama: \`${profile.name}\`\n` +
-        `• Username: \`${profile.username ? '@' + profile.username : 'Tidak ada'}\`\n` +
-        `• Saldo: \`Rp ${balance}\`\n` +
-        `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString('id-ID')}\`\n\n` +
-        `📧 *Total Email (${totalEmails})*\n\n` +
-        `| Email | Status |\n` +
-        `|---|---|\n` +
-        accountList,
-        { parse_mode: 'Markdown' }
+          `• Nama: \`${profile.name}\`\n` +
+          `• Username: \`${profile.username ? "@" + profile.username : "Tidak ada"}\`\n` +
+          `• Saldo: \`Rp ${balance}\`\n` +
+          `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString("id-ID")}\`\n\n` +
+          `📧 *Total Email (${totalEmails})*\n\n` +
+          `| Email | Status |\n` +
+          `|---|---|\n` +
+          accountList,
+        { parse_mode: "Markdown" },
       );
     } catch (err) {
-      console.error('Error fetching profile:', err);
-      await ctx.reply('❌ Gagal mengambil data profil. Coba lagi.');
+      console.error("Error fetching profile:", err);
+      await ctx.reply("❌ Gagal mengambil data profil. Coba lagi.");
     }
   });
 
   // /setor - Mulai proses setor akun game (2 step)
   // User harus lewat 2 tahap: (1) kirim akun, (2) kirim harga
-  bot.command('setor', async (ctx) => {
+  bot.command("setor", async (ctx) => {
     // Import setorSessions dari state.js karena ini dynamic import
-    const { setorSessions } = await import('./state.js');
+    const { setorSessions } = await import("./state.js");
 
     // Buat session untuk user ini dengan step 'account'
     // Artinya: user sekarang masuk mode setor, belum kirim apa-apa
     setorSessions.set(ctx.from.id, {
-      step: 'account'
+      step: "account",
     });
 
     await ctx.reply(
       `📥 *Setor Email*\n\n` +
-      `*Step 1/2:* Kirim email dan password:\n` +
-      `Format: \`gmail;password\`\n\n` +
-      `Contoh: \`example@gmail.com;mypassword\`\n\n` +
-      `Ketik /cancel untuk batal.`,
-      { parse_mode: 'Markdown' }
+        `*Step 1/2:* Kirim email dan password:\n` +
+        `Format: \`gmail;password\`\n\n` +
+        `Contoh: \`example@gmail.com;mypassword\`\n\n` +
+        `Ketik /cancel untuk batal.`,
+      { parse_mode: "Markdown" },
     );
   });
 
   // /cancel - Batalkan mode setor
   // Kalau user ada di session, hapus session-nya
-  bot.command('cancel', async (ctx) => {
-    const { setorSessions, wdSessions } = await import('./state.js');
-    const { refundUserBalance } = await import('./database.js');
+  bot.command("cancel", async (ctx) => {
+    const { setorSessions, wdSessions } = await import("./state.js");
 
     if (setorSessions.has(ctx.from.id)) {
       setorSessions.delete(ctx.from.id);
-      await ctx.reply('❌ Proses setor dibatalkan.');
+      await ctx.reply("❌ Proses setor dibatalkan.");
     } else if (wdSessions.has(ctx.from.id)) {
-      const session = wdSessions.get(ctx.from.id);
-      if (session.refunded) {
-        wdSessions.delete(ctx.from.id);
-        await ctx.reply('Tidak ada proses yang sedang berjalan.');
-      } else {
-        try {
-          await refundUserBalance(ctx.from.id, session.amount);
-        } catch (err) {
-          console.error('Error refund balance:', err);
-        }
-        wdSessions.delete(ctx.from.id);
-        await ctx.reply('❌ Proses withdraw dibatalkan. Saldo telah dikembalikan.');
-      }
+      wdSessions.delete(ctx.from.id);
+      await ctx.reply("❌ Proses withdraw dibatalkan.");
     } else {
-      await ctx.reply('Tidak ada proses yang sedang berjalan.');
+      await ctx.reply("Tidak ada proses yang sedang berjalan.");
     }
   });
 
-  bot.command('wd', async (ctx) => {
-    const { wdSessions } = await import('./state.js');
+  bot.command("wd", async (ctx) => {
+    const { wdSessions } = await import("./state.js");
 
     if (wdSessions.has(ctx.from.id)) {
-      return ctx.reply('⚠️ Anda sudah dalam proses withdraw. Ketik /cancel untuk membatalkan.');
+      return ctx.reply("⚠️ Anda sudah dalam proses withdraw. Ketik /cancel untuk membatalkan.");
     }
 
     const profile = await getUserProfile(ctx.from.id);
@@ -146,80 +142,79 @@ Pilih command di bawah ini:
 
     await ctx.reply(
       `💰 *Withdraw Saldo*\n\n` +
-      `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n\n` +
-      `Pilih opsi di bawah:`,
+        `Saldo Anda: \`Rp ${balance.toLocaleString("id-ID")}\`\n\n` +
+        `Pilih opsi di bawah:`,
       {
-        parse_mode: 'Markdown',
+        parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('💸 WD Now', 'wd:now')],
-          [Markup.button.callback('📋 Cek Riwayat WD', 'wd:history')]
-        ])
-      }
+          [Markup.button.callback("💸 WD Now", "wd:now")],
+          [Markup.button.callback("📋 Cek Riwayat WD", "wd:history")],
+        ]),
+      },
     );
   });
 
-  bot.action('wd:now', async (ctx) => {
-    const { wdSessions } = await import('./state.js');
+  bot.action("wd:now", async (ctx) => {
+    const { wdSessions } = await import("./state.js");
 
     const profile = await getUserProfile(ctx.from.id);
     const balance = Number(profile.balance) || 0;
 
     if (balance < 10000) {
-      return ctx.answerCbQuery('❌ Saldo tidak mencukupi! Minimal WD Rp 10.000');
+      return ctx.answerCbQuery("❌ Saldo tidak mencukupi! Minimal WD Rp 10.000");
     }
 
     await ctx.deleteMessage();
 
     wdSessions.set(ctx.from.id, {
-      step: 'account_name'
+      step: "account_name",
     });
 
     await ctx.reply(
       `💰 *Withdraw Saldo*\n\n` +
-      `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n\n` +
-      `*Step 1/3:* Masukkan *Atas Nama* rekening Anda:\n\n` +
-      `Ketik /cancel untuk batal.`,
-      { parse_mode: 'Markdown' }
+        `Saldo Anda: \`Rp ${balance.toLocaleString("id-ID")}\`\n\n` +
+        `*Step 1/3:* Masukkan *Atas Nama* rekening Anda:\n\n` +
+        `Ketik /cancel untuk batal.`,
+      { parse_mode: "Markdown" },
     );
   });
 
-  bot.action('wd:history', async (ctx) => {
+  bot.action("wd:history", async (ctx) => {
     const history = await getUserWithdrawalHistory(ctx.from.id);
 
     if (history.length === 0) {
-      return ctx.answerCbQuery('📭 Belum ada riwayat withdraw.');
+      return ctx.answerCbQuery("📭 Belum ada riwayat withdraw.");
     }
 
     let message = `📋 *Riwayat Withdraw*\n\n`;
 
     history.forEach((wd, i) => {
-      const statusEmoji = wd.status === 'pending' ? '⏳' : wd.status === 'approved' ? '✅' : '❌';
-      const date = new Date(wd.created_at).toLocaleDateString('id-ID', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+      const statusEmoji = wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
+      const date = new Date(wd.created_at).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
 
       message += `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n`;
-      message += `Nominal: \`Rp ${Number(wd.amount).toLocaleString('id-ID')}\`\n`;
+      message += `Nominal: \`Rp ${Number(wd.amount).toLocaleString("id-ID")}\`\n`;
       message += `Tanggal: \`${date}\`\n\n`;
     });
 
     await ctx.editMessageText(message, {
-      parse_mode: 'Markdown',
-      reply_markup: Markup.inlineKeyboard([
-        [Markup.button.callback('🔙 Kembali', 'wd:back')]
-      ]).reply_markup
+      parse_mode: "Markdown",
+      reply_markup: Markup.inlineKeyboard([[Markup.button.callback("🔙 Kembali", "wd:back")]])
+        .reply_markup,
     });
   });
 
-  bot.action('wd:back', async (ctx) => {
-    const { wdSessions } = await import('./state.js');
+  bot.action("wd:back", async (ctx) => {
+    const { wdSessions } = await import("./state.js");
 
     if (wdSessions.has(ctx.from.id)) {
-      return ctx.answerCbQuery('⚠️ Anda sedang dalam proses withdraw.');
+      return ctx.answerCbQuery("⚠️ Anda sedang dalam proses withdraw.");
     }
 
     const profile = await getUserProfile(ctx.from.id);
@@ -227,142 +222,149 @@ Pilih command di bawah ini:
 
     await ctx.editMessageText(
       `💰 *Withdraw Saldo*\n\n` +
-      `Saldo Anda: \`Rp ${balance.toLocaleString('id-ID')}\`\n\n` +
-      `Pilih opsi di bawah:`,
+        `Saldo Anda: \`Rp ${balance.toLocaleString("id-ID")}\`\n\n` +
+        `Pilih opsi di bawah:`,
       {
-        parse_mode: 'Markdown',
+        parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('💸 WD Now', 'wd:now')],
-          [Markup.button.callback('📋 Cek Riwayat WD', 'wd:history')]
-        ])
-      }
+          [Markup.button.callback("💸 WD Now", "wd:now")],
+          [Markup.button.callback("📋 Cek Riwayat WD", "wd:history")],
+        ]),
+      },
     );
   });
 
   // /admin - Admin panel untuk manage semua akun
-  bot.command('admin', async (ctx) => {
+  bot.command("admin", async (ctx) => {
     if (!isAdmin(ctx.from.id)) {
-      return ctx.reply('❌ Akses ditolak. Hanya untuk admin.');
+      return ctx.reply("❌ Akses ditolak. Hanya untuk admin.");
     }
 
     const buttons = Markup.inlineKeyboard([
-      [Markup.button.callback('📋 Semua Email', 'admin:filter:all')],
-      [Markup.button.callback('⏳ Pending', 'admin:filter:pending')],
-      [Markup.button.callback('✅ Approved', 'admin:filter:approved')],
-      [Markup.button.callback('❌ Rejected', 'admin:filter:rejected')]
+      [Markup.button.callback("📋 Semua Email", "admin:filter:all")],
+      [Markup.button.callback("⏳ Pending", "admin:filter:pending")],
+      [Markup.button.callback("✅ Approved", "admin:filter:approved")],
+      [Markup.button.callback("❌ Rejected", "admin:filter:rejected")],
     ]);
 
-    await ctx.reply('📋 *Admin Panel*\n\nPilih kategori:', {
-      parse_mode: 'Markdown',
-      ...buttons
+    await ctx.reply("📋 *Admin Panel*\n\nPilih kategori:", {
+      parse_mode: "Markdown",
+      ...buttons,
     });
   });
 
   // Handle filter callback
   bot.action(/^admin:filter:(all|pending|approved|rejected)$/, async (ctx) => {
     const filter = ctx.match[1];
-    const editable = filter === 'all' || filter === 'pending';
+    const editable = filter === "all" || filter === "pending";
 
     try {
       const accounts = await getAllGameAccounts(filter);
 
       if (accounts.length === 0) {
-        return ctx.answerCbQuery('📭 Tidak ada akun.');
+        return ctx.answerCbQuery("📭 Tidak ada akun.");
       }
 
-      const labels = { all: 'Semua', pending: 'Pending', approved: 'Approved', rejected: 'Rejected' };
+      const labels = {
+        all: "Semua",
+        pending: "Pending",
+        approved: "Approved",
+        rejected: "Rejected",
+      };
       let message = `📋 *${labels[filter]} — ${accounts.length} Akun*\n\n`;
 
-      accounts.forEach(acc => {
-        const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
+      accounts.forEach((acc) => {
+        const statusEmoji =
+          acc.status === "pending" ? "⏳" : acc.status === "approved" ? "✅" : "❌";
         message += `*#${acc.id}* | \`${acc.email}\` | ${statusEmoji} *${acc.status}*\n`;
-        message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || '-'}\`\n\n`;
+        message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || "-"}\`\n\n`;
       });
 
       let actionButtons = [];
 
       if (editable) {
-        actionButtons = accounts.map(acc => {
+        actionButtons = accounts.map((acc) => {
           return [
             Markup.button.callback(`✅ Approve #${acc.id}`, `admin:approve:${acc.id}`),
-            Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`)
+            Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`),
           ];
         });
       }
 
-      actionButtons.push([Markup.button.callback('🔙 Kembali', 'admin:back')]);
+      actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:back")]);
 
       await ctx.editMessageText(message, {
-        parse_mode: 'Markdown',
-        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup,
       });
     } catch (err) {
-      console.error('Error in admin filter:', err);
-      await ctx.answerCbQuery('❌ Gagal memuat data.');
+      console.error("Error in admin filter:", err);
+      await ctx.answerCbQuery("❌ Gagal memuat data.");
     }
   });
 
   // Handle back to menu
-  bot.action('admin:back', async (ctx) => {
+  bot.action("admin:back", async (ctx) => {
     const buttons = Markup.inlineKeyboard([
-      [Markup.button.callback('📋 Semua Email', 'admin:filter:all')],
-      [Markup.button.callback('⏳ Pending', 'admin:filter:pending')],
-      [Markup.button.callback('✅ Approved', 'admin:filter:approved')],
-      [Markup.button.callback('❌ Rejected', 'admin:filter:rejected')]
+      [Markup.button.callback("📋 Semua Email", "admin:filter:all")],
+      [Markup.button.callback("⏳ Pending", "admin:filter:pending")],
+      [Markup.button.callback("✅ Approved", "admin:filter:approved")],
+      [Markup.button.callback("❌ Rejected", "admin:filter:rejected")],
     ]);
 
-    await ctx.editMessageText('📋 *Admin Panel*\n\nPilih kategori:', {
-      parse_mode: 'Markdown',
-      ...buttons
+    await ctx.editMessageText("📋 *Admin Panel*\n\nPilih kategori:", {
+      parse_mode: "Markdown",
+      ...buttons,
     });
   });
 
   // Handle callback dari tombol approve/reject
   bot.action(/^admin:(approve|reject):(.+)$/, async (ctx) => {
     const [, action, accountId] = ctx.match;
-    const status = action === 'approve' ? 'approved' : 'rejected';
+    const status = action === "approve" ? "approved" : "rejected";
+    const userId = ctx.from.id;
 
     try {
-      await updateAccountStatus(parseInt(accountId), status);
-      await ctx.answerCbQuery(`✅ Akun ${action === 'approve' ? 'disetujui' : 'ditolak'}!`);
+      await updateAccountStatus(parseInt(accountId), status, userId);
+      await ctx.answerCbQuery(`✅ Akun ${action === "approve" ? "disetujui" : "ditolak"}!`);
 
       // Go back to pending filter view
-      const pending = await getAllGameAccounts('pending');
+      const pending = await getAllGameAccounts("pending");
 
       if (pending.length === 0) {
-        return ctx.editMessageText('📭 *Tidak ada akun pending*', {
-          parse_mode: 'Markdown',
+        return ctx.editMessageText("📭 *Tidak ada akun pending*", {
+          parse_mode: "Markdown",
           reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('🔙 Kembali', 'admin:back')]
-          ]).reply_markup
+            [Markup.button.callback("🔙 Kembali", "admin:back")],
+          ]).reply_markup,
         });
       }
 
       let message = `📋 *Pending — ${pending.length} Akun*\n\n`;
 
-      pending.forEach(acc => {
-        const statusEmoji = acc.status === 'pending' ? '⏳' : acc.status === 'approved' ? '✅' : '❌';
+      pending.forEach((acc) => {
+        const statusEmoji =
+          acc.status === "pending" ? "⏳" : acc.status === "approved" ? "✅" : "❌";
         message += `*#${acc.id}* | \`${acc.email}\` | ${statusEmoji} *${acc.status}*\n`;
-        message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || '-'}\`\n\n`;
+        message += `Level: \`${acc.level}\` | Auth: \`${acc.authenticator || "-"}\`\n\n`;
       });
 
-      const actionButtons = pending.map(acc => {
+      const actionButtons = pending.map((acc) => {
         return [
           Markup.button.callback(`✅ Approve #${acc.id}`, `admin:approve:${acc.id}`),
-          Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`)
+          Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`),
         ];
       });
 
-      actionButtons.push([Markup.button.callback('🔙 Kembali', 'admin:back')]);
+      actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:back")]);
 
       await ctx.editMessageText(message, {
-        parse_mode: 'Markdown',
-        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup,
       });
     } catch (err) {
-      console.error('Error updating status:', err);
-      await ctx.answerCbQuery('❌ Gagal update status.');
+      console.error("Error updating status:", err);
+      await ctx.answerCbQuery("❌ Gagal update status.");
     }
   });
-
 }
