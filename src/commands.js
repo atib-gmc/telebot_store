@@ -82,7 +82,6 @@ Pilih command di bawah ini:
           `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString("id-ID")}\`\n\n` +
           `📧 *Total Email (${totalEmails})*\n\n` +
           `| Email | Status |\n` +
-          `|---|---|\n` +
           accountList,
         { parse_mode: "Markdown" },
       );
@@ -167,13 +166,14 @@ Pilih command di bawah ini:
     await ctx.deleteMessage();
 
     wdSessions.set(ctx.from.id, {
-      step: "account_name",
+      step: "bank_name",
     });
 
     await ctx.reply(
       `💰 *Withdraw Saldo*\n\n` +
         `Saldo Anda: \`Rp ${balance.toLocaleString("id-ID")}\`\n\n` +
-        `*Step 1/3:* Masukkan *Atas Nama* rekening Anda:\n\n` +
+        `*Step 1/4:* Masukkan *Nama Bank / E-Wallet* Anda:\n\n` +
+        `Contoh: \`BCA\`, \`GoPay\`, \`DANA\`\n\n` +
         `Ketik /cancel untuk batal.`,
       { parse_mode: "Markdown" },
     );

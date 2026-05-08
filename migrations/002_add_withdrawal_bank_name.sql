@@ -1,0 +1,2 @@
+ALTER TABLE withdrawals
+  ADD COLUMN bank_name TEXT NOT NULL DEFAULT '';

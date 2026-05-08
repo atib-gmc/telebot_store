@@ -146,6 +146,23 @@ export function registerTextHandler(bot) {
     if (wdSessions.has(userId)) {
       const session = wdSessions.get(userId);
 
+      if (session.step === "bank_name") {
+        if (text.trim().length < 1) {
+          return ctx.reply("❌ Nama bank/e-wallet tidak valid.");
+        }
+
+        wdSessions.set(userId, {
+          step: "account_name",
+          bank_name: text.trim(),
+        });
+
+        return ctx.reply(
+          `✅ *Step 2/4:* Masukkan *Atas Nama* rekening Anda:\n\n` +
+            `Ketik /cancel untuk batal.`,
+          { parse_mode: "Markdown" },
+        );
+      }
+
       if (session.step === "account_name") {
         if (text.trim().length < 2) {
           return ctx.reply("❌ Nama terlalu pendek. Masukkan nama yang valid.");
@@ -153,11 +170,12 @@ export function registerTextHandler(bot) {
 
         wdSessions.set(userId, {
           step: "account_number",
+          bank_name: session.bank_name,
           account_name: text.trim(),
         });
 
         return ctx.reply(
-          `✅ *Step 2/3:* Masukkan *Nomor Rekening* Anda:\n\n` + `Ketik /cancel untuk batal.`,
+          `✅ *Step 3/4:* Masukkan *Nomor Rekening* Anda:\n\n` + `Ketik /cancel untuk batal.`,
           { parse_mode: "Markdown" },
         );
       }
@@ -169,12 +187,13 @@ export function registerTextHandler(bot) {
 
         wdSessions.set(userId, {
           step: "amount",
+          bank_name: session.bank_name,
           account_name: session.account_name,
           account_number: text.trim(),
         });
 
         return ctx.reply(
-          `✅ *Step 3/3:* Masukkan *Nominal Withdraw*\n\n` +
+          `✅ *Step 4/4:* Masukkan *Nominal Withdraw*\n\n` +
             `❗ Minimal withdraw: \`Rp 10.000\`\n\n` +
             `Ketik /cancel untuk batal.`,
           { parse_mode: "Markdown" },
@@ -205,7 +224,13 @@ export function registerTextHandler(bot) {
         }
 
         try {
-          await createWithdrawal(userId, session.account_name, session.account_number, amount);
+          await createWithdrawal(
+            userId,
+            session.bank_name,
+            session.account_name,
+            session.account_number,
+            amount,
+          );
 
           await deductUserBalance(userId, amount);
 
@@ -213,6 +238,7 @@ export function registerTextHandler(bot) {
 
           return ctx.reply(
             `✅ *Withdraw Berhasil Dibuat!*\n\n` +
+              `• Bank/E-Wallet: \`${session.bank_name}\`\n` +
               `• Atas Nama: \`${session.account_name}\`\n` +
               `• Nomor Rekening: \`${session.account_number}\`\n` +
               `• Nominal: \`Rp ${amount.toLocaleString("id-ID")}\`\n` +

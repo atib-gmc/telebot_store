@@ -178,11 +178,12 @@ export async function getUserPendingWithdrawals(userId) {
   return data || [];
 }
 
-export async function createWithdrawal(userId, accountName, accountNumber, amount) {
+export async function createWithdrawal(userId, bankName, accountName, accountNumber, amount) {
   const { data, error } = await supabase
     .from("withdrawals")
     .insert({
       user_id: userId,
+      bank_name: bankName,
       account_name: accountName,
       account_number: accountNumber,
       amount,
