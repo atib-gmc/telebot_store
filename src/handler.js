@@ -6,8 +6,9 @@ import {
   createWithdrawal,
   deductUserBalance,
   getUserProfile,
+  updateWithdrawalStatus,
 } from "./database.js";
-import { userData, setorSessions, wdSessions } from "./state.js";
+import { userData, setorSessions, wdSessions, adminSessions } from "./state.js";
 
 // Track user setiap ada pesan masuk
 // Setiap user yang chat, datanya disimpan di memori (userData Map)
@@ -41,6 +42,32 @@ export function registerTextHandler(bot) {
     // Setiap pesan selalu update data tracking
     trackUser(ctx);
     ensureUserExists(ctx).catch((err) => console.error("DB error:", err));
+
+    // Cek apakah admin sedang dalam mode reject withdrawal
+    if (adminSessions.has(userId)) {
+      const session = adminSessions.get(userId);
+
+      if (session.action === "reject_withdrawal") {
+        if (text.trim().length < 1) {
+          return ctx.reply("❌ Alasan tidak boleh kosong. Ketik alasan penolakan:");
+        }
+
+        try {
+          await updateWithdrawalStatus(session.withdrawalId, "rejected", text.trim());
+
+          adminSessions.delete(userId);
+
+          return ctx.reply(
+            `✅ *WD #${session.withdrawalId} Ditolak!*\n\n` +
+              `Alasan: \`${text.trim()}\``,
+            { parse_mode: "Markdown" },
+          );
+        } catch (err) {
+          console.error("Error rejecting withdrawal:", err);
+          return ctx.reply("❌ Gagal menolak withdrawal. Coba lagi.");
+        }
+      }
+    }
 
     // Step 2: Cek apakah user sedang dalam mode setor
     // setorSessions berisi semua user yang sudah ketik /setor

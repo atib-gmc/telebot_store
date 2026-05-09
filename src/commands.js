@@ -8,8 +8,10 @@ import {
   isAdmin,
   getUserPendingWithdrawals,
   getUserWithdrawalHistory,
+  getAllWithdrawals,
+  updateWithdrawalStatus,
 } from "./database.js";
-import { userData } from "./state.js";
+import { userData, adminSessions } from "./state.js";
 
 function buildMainMenu() {
   return Markup.keyboard([["/setor"], ["/wd"], ["/cancel"], ["/myprofile"], ["/menu"]]).resize();
@@ -124,6 +126,9 @@ Pilih command di bawah ini:
     } else if (wdSessions.has(ctx.from.id)) {
       wdSessions.delete(ctx.from.id);
       await ctx.reply("❌ Proses withdraw dibatalkan.");
+    } else if (adminSessions.has(ctx.from.id)) {
+      adminSessions.delete(ctx.from.id);
+      await ctx.reply("❌ Proses admin dibatalkan.");
     } else {
       await ctx.reply("Tidak ada proses yang sedang berjalan.");
     }
@@ -245,6 +250,7 @@ Pilih command di bawah ini:
       [Markup.button.callback("⏳ Pending", "admin:filter:pending")],
       [Markup.button.callback("✅ Approved", "admin:filter:approved")],
       [Markup.button.callback("❌ Rejected", "admin:filter:rejected")],
+      [Markup.button.callback("💳 Users Withdrawals", "admin:wd")],
     ]);
 
     await ctx.reply("📋 *Admin Panel*\n\nPilih kategori:", {
@@ -310,12 +316,161 @@ Pilih command di bawah ini:
       [Markup.button.callback("⏳ Pending", "admin:filter:pending")],
       [Markup.button.callback("✅ Approved", "admin:filter:approved")],
       [Markup.button.callback("❌ Rejected", "admin:filter:rejected")],
+      [Markup.button.callback("💳 Users Withdrawals", "admin:wd")],
     ]);
 
     await ctx.editMessageText("📋 *Admin Panel*\n\nPilih kategori:", {
       parse_mode: "Markdown",
       ...buttons,
     });
+  });
+
+  // ===== ADMIN WITHDRAWALS =====
+
+  bot.action("admin:wd", async (ctx) => {
+    const buttons = Markup.inlineKeyboard([
+      [Markup.button.callback("📋 Semua WD", "admin:wd:filter:all")],
+      [Markup.button.callback("⏳ Pending", "admin:wd:filter:pending")],
+      [Markup.button.callback("✅ Approved", "admin:wd:filter:approved")],
+      [Markup.button.callback("❌ Rejected", "admin:wd:filter:rejected")],
+      [Markup.button.callback("🔙 Kembali", "admin:back")],
+    ]);
+
+    await ctx.editMessageText("💳 *Withdrawals*\n\nPilih status:", {
+      parse_mode: "Markdown",
+      ...buttons,
+    });
+  });
+
+  bot.action(/^admin:wd:filter:(all|pending|approved|rejected)$/, async (ctx) => {
+    const filter = ctx.match[1];
+    const editable = filter === "pending";
+
+    try {
+      const withdrawals = await getAllWithdrawals(filter);
+
+      if (withdrawals.length === 0) {
+        return ctx.answerCbQuery("📭 Tidak ada withdrawal.");
+      }
+
+      const labels = {
+        all: "Semua",
+        pending: "Pending",
+        approved: "Approved",
+        rejected: "Rejected",
+      };
+      let message = `💳 *${labels[filter]} — ${withdrawals.length} Withdrawal*\n\n`;
+
+      withdrawals.forEach((wd) => {
+        const statusEmoji =
+          wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
+        const date = new Date(wd.created_at).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        message +=
+          `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n` +
+          `Bank: \`${wd.bank_name}\` | A/n: \`${wd.account_name}\`\n` +
+          `No: \`${wd.account_number}\` | Rp ${Number(wd.amount).toLocaleString("id-ID")}\n` +
+          `Tanggal: \`${date}\`\n\n`;
+      });
+
+      let actionButtons = [];
+
+      if (editable) {
+        actionButtons = withdrawals.map((wd) => {
+          return [
+            Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
+            Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
+          ];
+        });
+      }
+
+      actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:wd")]);
+
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup,
+      });
+    } catch (err) {
+      console.error("Error in admin wd filter:", err);
+      await ctx.answerCbQuery("❌ Gagal memuat data.");
+    }
+  });
+
+  bot.action(/^admin:wd:approve:(\d+)$/, async (ctx) => {
+    const withdrawalId = parseInt(ctx.match[1]);
+
+    try {
+      await updateWithdrawalStatus(withdrawalId, "approved");
+      await ctx.answerCbQuery(`✅ WD #${withdrawalId} disetujui!`);
+
+      const pending = await getAllWithdrawals("pending");
+
+      if (pending.length === 0) {
+        return ctx.editMessageText("📭 *Tidak ada withdrawal pending*", {
+          parse_mode: "Markdown",
+          reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback("🔙 Kembali", "admin:wd")],
+          ]).reply_markup,
+        });
+      }
+
+      let message = `💳 *Pending — ${pending.length} Withdrawal*\n\n`;
+
+      pending.forEach((wd) => {
+        const date = new Date(wd.created_at).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        message +=
+          `*#${wd.id}* | ⏳ *pending*\n` +
+          `Bank: \`${wd.bank_name}\` | A/n: \`${wd.account_name}\`\n` +
+          `No: \`${wd.account_number}\` | Rp ${Number(wd.amount).toLocaleString("id-ID")}\n` +
+          `Tanggal: \`${date}\`\n\n`;
+      });
+
+      const actionButtons = pending.map((wd) => {
+        return [
+          Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
+          Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
+        ];
+      });
+
+      actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:wd")]);
+
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup,
+      });
+    } catch (err) {
+      console.error("Error approving withdrawal:", err);
+      await ctx.answerCbQuery("❌ Gagal approve withdrawal.");
+    }
+  });
+
+  bot.action(/^admin:wd:reject:(\d+)$/, async (ctx) => {
+    const withdrawalId = parseInt(ctx.match[1]);
+
+    adminSessions.set(ctx.from.id, {
+      action: "reject_withdrawal",
+      withdrawalId,
+    });
+
+    await ctx.deleteMessage();
+
+    await ctx.reply(
+      `✏️ *Masukkan Alasan Penolakan*\n\n` +
+        `WD #${withdrawalId} akan ditolak. Ketik alasan penolakan:\n\n` +
+        `Ketik /cancel untuk batal.`,
+      { parse_mode: "Markdown" },
+    );
   });
 
   // Handle callback dari tombol approve/reject

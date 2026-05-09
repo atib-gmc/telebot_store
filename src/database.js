@@ -242,6 +242,39 @@ export async function refundUserBalance(userId, amount) {
   return data;
 }
 
+export async function getAllWithdrawals(statusFilter = null) {
+  let query = supabase
+    .from("withdrawals")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (statusFilter && statusFilter !== "all") {
+    query = query.eq("status", statusFilter);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function updateWithdrawalStatus(withdrawalId, status, note = null) {
+  const updateData = { status };
+  if (note !== null) {
+    updateData.note = note;
+  }
+
+  const { data, error } = await supabase
+    .from("withdrawals")
+    .update(updateData)
+    .eq("id", withdrawalId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function getUserWithdrawalHistory(userId) {
   const { data, error } = await supabase
     .from("withdrawals")

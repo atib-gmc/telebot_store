@@ -7,3 +7,5 @@ export const userData = new Map();
 export const setorSessions = new Map();
 
 export const wdSessions = new Map();
+
+export const adminSessions = new Map();
