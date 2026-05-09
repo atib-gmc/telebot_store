@@ -1,3 +1,4 @@
+import { Markup } from "telegraf";
 import { isValidGmail } from "../helpers/helper.js";
 import {
   ensureUserExists,
@@ -57,11 +58,17 @@ export function registerTextHandler(bot) {
 
           adminSessions.delete(userId);
 
-          return ctx.reply(
+          await ctx.reply(
             `✅ *WD #${session.withdrawalId} Ditolak!*\n\n` +
               `Alasan: \`${text.trim()}\``,
-            { parse_mode: "Markdown" },
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback("📋 Kembali ke Semua WD", "admin:wd:filter:all")],
+              ]),
+            },
           );
+          return;
         } catch (err) {
           console.error("Error rejecting withdrawal:", err);
           return ctx.reply("❌ Gagal menolak withdrawal. Coba lagi.");

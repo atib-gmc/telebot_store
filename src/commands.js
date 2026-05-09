@@ -289,12 +289,14 @@ Pilih command di bawah ini:
       let actionButtons = [];
 
       if (editable) {
-        actionButtons = accounts.map((acc) => {
-          return [
-            Markup.button.callback(`✅ Approve #${acc.id}`, `admin:approve:${acc.id}`),
-            Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`),
-          ];
-        });
+        actionButtons = accounts
+          .filter((acc) => acc.status === "pending")
+          .map((acc) => {
+            return [
+              Markup.button.callback(`✅ Approve #${acc.id}`, `admin:approve:${acc.id}`),
+              Markup.button.callback(`❌ Reject #${acc.id}`, `admin:reject:${acc.id}`),
+            ];
+          });
       }
 
       actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:back")]);
@@ -379,24 +381,15 @@ Pilih command di bawah ini:
 
       let actionButtons = [];
 
-      if (filter === "pending") {
-        actionButtons = withdrawals.map((wd) => {
-          return [
-            Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
-            Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
-          ];
-        });
-      } else if (filter === "all") {
-        actionButtons = withdrawals.map((wd) => {
-          const statusEmoji =
-            wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
-          return [
-            Markup.button.callback(
-              `#${wd.id} ${statusEmoji} Rp ${Number(wd.amount).toLocaleString("id-ID")}`,
-              `admin:wd:view:${wd.id}`,
-            ),
-          ];
-        });
+      if (filter === "pending" || filter === "all") {
+        actionButtons = withdrawals
+          .filter((wd) => wd.status === "pending")
+          .map((wd) => {
+            return [
+              Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
+              Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
+            ];
+          });
       }
 
       actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:wd")]);
@@ -418,20 +411,12 @@ Pilih command di bawah ini:
       await updateWithdrawalStatus(withdrawalId, "approved");
       await ctx.answerCbQuery(`✅ WD #${withdrawalId} disetujui!`);
 
-      const pending = await getAllWithdrawals("pending");
+      const all = await getAllWithdrawals();
+      let message = `💳 *Semua — ${all.length} Withdrawal*\n\n`;
 
-      if (pending.length === 0) {
-        return ctx.editMessageText("📭 *Tidak ada withdrawal pending*", {
-          parse_mode: "Markdown",
-          reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback("🔙 Kembali", "admin:wd")],
-          ]).reply_markup,
-        });
-      }
-
-      let message = `💳 *Pending — ${pending.length} Withdrawal*\n\n`;
-
-      pending.forEach((wd) => {
+      all.forEach((wd) => {
+        const statusEmoji =
+          wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
         const date = new Date(wd.created_at).toLocaleDateString("id-ID", {
           day: "2-digit",
           month: "2-digit",
@@ -440,18 +425,20 @@ Pilih command di bawah ini:
           minute: "2-digit",
         });
         message +=
-          `*#${wd.id}* | ⏳ *pending*\n` +
+          `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n` +
           `Bank: \`${wd.bank_name}\` | A/n: \`${wd.account_name}\`\n` +
           `No: \`${wd.account_number}\` | Rp ${Number(wd.amount).toLocaleString("id-ID")}\n` +
           `Tanggal: \`${date}\`\n\n`;
       });
 
-      const actionButtons = pending.map((wd) => {
-        return [
-          Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
-          Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
-        ];
-      });
+      const actionButtons = all
+        .filter((wd) => wd.status === "pending")
+        .map((wd) => {
+          return [
+            Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
+            Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
+          ];
+        });
 
       actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:wd")]);
 
