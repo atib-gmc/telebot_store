@@ -150,11 +150,20 @@ export async function getAllGameAccounts(statusFilter = null) {
 // ===== Update status akun =====
 export async function updateAccountStatus(accountId, status, userId) {
   if (status.toLowerCase() === "approved") {
-    //tambahakan balance user
+    const { data: account, error: fetchError } = await supabase
+      .from("game_accounts")
+      .select("user_id")
+      .eq("id", accountId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
     const { error: incrementError } = await supabase.rpc("increment_balance", {
-      target_user_id: userId,
+      target_user_id: account.user_id,
       amount: 1500,
     });
+
+    if (incrementError) throw incrementError;
   }
   const { data, error } = await supabase
     .from("game_accounts")
