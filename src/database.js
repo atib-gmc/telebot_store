@@ -284,6 +284,13 @@ export async function updateWithdrawalStatus(withdrawalId, status, note = null) 
   return data;
 }
 
+export async function getAllUsers() {
+  const { data, error } = await supabase.from("users").select("user_id");
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function getUserWithdrawalHistory(userId) {
   const { data, error } = await supabase
     .from("withdrawals")

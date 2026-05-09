@@ -8,6 +8,7 @@ import {
   deductUserBalance,
   getUserProfile,
   updateWithdrawalStatus,
+  getAllUsers,
 } from "./database.js";
 import { userData, setorSessions, wdSessions, adminSessions } from "./state.js";
 
@@ -74,6 +75,50 @@ export function registerTextHandler(bot) {
           return ctx.reply("❌ Gagal menolak withdrawal. Coba lagi.");
         }
       }
+
+      if (session.action === "broadcast") {
+        if (!text || text.trim().length === 0) {
+          return ctx.reply("❌ Pesan tidak boleh kosong.");
+        }
+
+        try {
+          await ctx.reply("📡 Broadcast sedang diproses...");
+
+          const users = await getAllUsers();
+          let sent = 0;
+          let failed = 0;
+
+          for (const user of users) {
+            try {
+              await ctx.telegram.sendMessage(user.user_id, text, { parse_mode: "Markdown" });
+              sent++;
+            } catch (err) {
+              failed++;
+            }
+            await new Promise((r) => setTimeout(r, 50));
+          }
+
+          adminSessions.delete(userId);
+
+          await ctx.reply(
+            `✅ *Broadcast selesai!*\n\n` +
+              `• Total user: \`${users.length}\`\n` +
+              `• Terkirim: \`${sent}\`\n` +
+              `• Gagal: \`${failed}\``,
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback("🔙 Kembali ke Admin Panel", "admin:back")],
+              ]),
+            },
+          );
+        } catch (err) {
+          console.error("Error broadcast:", err);
+          adminSessions.delete(userId);
+          await ctx.reply("❌ Broadcast gagal. Coba lagi.");
+        }
+        return;
+      }
     }
 
     // Step 2: Cek apakah user sedang dalam mode setor
@@ -130,7 +175,7 @@ export function registerTextHandler(bot) {
             `✅ Akun berhasil disetor!\n\n` +
               `• Email: \`${email}\`\n` +
               `• Password: \`${level}\`\n\n` +
-              `*Masukan Kunci Rahasia 2FA,Bila tidak mengerti dimana mendapatkan Kunci Rahasia 2FA ikuti panduan video ini*\n\n` +
+              `*Masukan Kunci Rahasia 2FA,Bila tidak mengerti dimana mendapatkan Kunci Rahasia 2FA ikuti panduan video ini* [https://t.me/raivaults/2](https://t.me/raivaults/2)\n\n` +
               `Ketik /cancel untuk batal.`,
             { parse_mode: "Markdown" },
           );
@@ -296,6 +341,61 @@ export function registerTextHandler(bot) {
       } else {
         // Di private: ulangi pesan user
         ctx.reply(`Pesan Anda: ${text}`);
+      }
+    }
+  });
+}
+
+export function registerPhotoHandler(bot) {
+  bot.on("photo", async (ctx) => {
+    const userId = ctx.from.id;
+
+    if (adminSessions.has(userId)) {
+      const session = adminSessions.get(userId);
+
+      if (session.action === "broadcast") {
+        try {
+          const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+          const caption = ctx.message.caption || "";
+
+          await ctx.reply("📡 Broadcast foto sedang diproses...");
+
+          const users = await getAllUsers();
+          let sent = 0;
+          let failed = 0;
+
+          for (const user of users) {
+            try {
+              await ctx.telegram.sendPhoto(user.user_id, fileId, {
+                caption: caption || undefined,
+                parse_mode: "Markdown",
+              });
+              sent++;
+            } catch (err) {
+              failed++;
+            }
+            await new Promise((r) => setTimeout(r, 50));
+          }
+
+          adminSessions.delete(userId);
+
+          await ctx.reply(
+            `✅ *Broadcast selesai!*\n\n` +
+              `• Total user: \`${users.length}\`\n` +
+              `• Terkirim: \`${sent}\`\n` +
+              `• Gagal: \`${failed}\``,
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback("🔙 Kembali ke Admin Panel", "admin:back")],
+              ]),
+            },
+          );
+        } catch (err) {
+          console.error("Error broadcast photo:", err);
+          adminSessions.delete(userId);
+          await ctx.reply("❌ Broadcast foto gagal. Coba lagi.");
+        }
       }
     }
   });

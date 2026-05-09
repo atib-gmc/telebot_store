@@ -343,6 +343,7 @@ Pilih command di bawah ini:
       [Markup.button.callback("✅ Approved", "admin:filter:approved")],
       [Markup.button.callback("❌ Rejected", "admin:filter:rejected")],
       [Markup.button.callback("💳 Users Withdrawals", "admin:wd")],
+      [Markup.button.callback("📢 Broadcast", "admin:broadcast")],
     ]);
 
     await ctx.reply("📋 *Admin Panel*\n\nPilih kategori:", {
@@ -413,12 +414,26 @@ Pilih command di bawah ini:
       [Markup.button.callback("✅ Approved", "admin:filter:approved")],
       [Markup.button.callback("❌ Rejected", "admin:filter:rejected")],
       [Markup.button.callback("💳 Users Withdrawals", "admin:wd")],
+      [Markup.button.callback("📢 Broadcast", "admin:broadcast")],
     ]);
 
     await ctx.editMessageText("📋 *Admin Panel*\n\nPilih kategori:", {
       parse_mode: "Markdown",
       ...buttons,
     });
+  });
+
+  bot.action("admin:broadcast", async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
+
+    adminSessions.set(ctx.from.id, { action: "broadcast" });
+
+    await ctx.editMessageText(
+      "📢 *Broadcast*\n\n" +
+        "Kirim pesan teks *atau* foto yang ingin di-broadcast ke semua user.\n\n" +
+        "Ketik /cancel untuk batal.",
+      { parse_mode: "Markdown" },
+    );
   });
 
   // ===== ADMIN WITHDRAWALS =====
