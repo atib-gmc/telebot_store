@@ -15,9 +15,9 @@ import { userData, adminSessions } from "./state.js";
 
 function buildMainMenu() {
   return Markup.keyboard([
-    ["/setor 📥", "/wd 💸"],
-    ["/myprofile 👤", "/menu 📋"],
-    ["/cancel ❌"],
+    ["📥 Setor", "💸 Withdraw"],
+    ["👤 My Profile", "📋 Menu"],
+    ["❌ Cancel"],
   ]).resize();
 }
 
@@ -57,8 +57,54 @@ Pilih command di bawah ini:
     );
   });
 
+  bot.hears("📋 Menu", async (ctx) => {
+    const { setorSessions, wdSessions } = await import("./state.js");
+    if (!setorSessions.has(ctx.from.id) && !wdSessions.has(ctx.from.id)) {
+      return ctx.reply(
+        `📋 *Menu Utama*\n\n` +
+          `📥 Setor — Setor email\n` +
+          `💸 Withdraw — Tarik saldo\n` +
+          `👤 My Profile — Lihat profil & saldo\n` +
+          `❌ Cancel — Batalkan proses`,
+        {
+          parse_mode: "Markdown",
+          ...buildMainMenu(),
+        },
+      );
+    }
+  });
+
   // /myprofile - Tampilkan profil user dan saldo
   bot.command("myprofile", async (ctx) => {
+    try {
+      const profile = await getUserProfile(ctx.from.id);
+      const accounts = await getUserGameAccounts(ctx.from.id);
+
+      const balance = profile.balance ? Number(profile.balance).toLocaleString("id-ID") : "0";
+      const totalEmails = accounts.length;
+
+      await ctx.reply(
+        `👤 *Profil Anda*\n\n` +
+          `• Nama: \`${profile.name}\`\n` +
+          `• Username: \`${profile.username ? "@" + profile.username : "Tidak ada"}\`\n` +
+          `• Saldo: \`Rp ${balance}\`\n` +
+          `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString("id-ID")}\`\n` +
+          `• Total Email: \`${totalEmails}\``,
+        {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("📧 Riwayat Email", "profile:emails")],
+            [Markup.button.callback("💳 Riwayat WD", "profile:wd")],
+          ]),
+        },
+      );
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      await ctx.reply("❌ Gagal mengambil data profil. Coba lagi.");
+    }
+  });
+
+  bot.hears("👤 My Profile", async (ctx) => {
     try {
       const profile = await getUserProfile(ctx.from.id);
       const accounts = await getUserGameAccounts(ctx.from.id);
@@ -206,6 +252,23 @@ Pilih command di bawah ini:
     );
   });
 
+  bot.hears("📥 Setor", async (ctx) => {
+    const { setorSessions } = await import("./state.js");
+
+    setorSessions.set(ctx.from.id, {
+      step: "account",
+    });
+
+    await ctx.reply(
+      `📥 *Setor Email*\n\n` +
+        `*Step 1/2:* Kirim email dan password:\n` +
+        `Format: \`gmail;password\`\n\n` +
+        `Contoh: \`example@gmail.com;mypassword\`\n\n` +
+        `Ketik /cancel untuk batal.`,
+      { parse_mode: "Markdown" },
+    );
+  });
+
   // /cancel - Batalkan mode setor
   // Kalau user ada di session, hapus session-nya
   bot.command("cancel", async (ctx) => {
@@ -225,7 +288,48 @@ Pilih command di bawah ini:
     }
   });
 
+  bot.hears("❌ Cancel", async (ctx) => {
+    const { setorSessions, wdSessions } = await import("./state.js");
+
+    if (setorSessions.has(ctx.from.id)) {
+      setorSessions.delete(ctx.from.id);
+      await ctx.reply("❌ Proses setor dibatalkan.");
+    } else if (wdSessions.has(ctx.from.id)) {
+      wdSessions.delete(ctx.from.id);
+      await ctx.reply("❌ Proses withdraw dibatalkan.");
+    } else if (adminSessions.has(ctx.from.id)) {
+      adminSessions.delete(ctx.from.id);
+      await ctx.reply("❌ Proses admin dibatalkan.");
+    } else {
+      await ctx.reply("Tidak ada proses yang sedang berjalan.");
+    }
+  });
+
   bot.command("wd", async (ctx) => {
+    const { wdSessions } = await import("./state.js");
+
+    if (wdSessions.has(ctx.from.id)) {
+      return ctx.reply("⚠️ Anda sudah dalam proses withdraw. Ketik /cancel untuk membatalkan.");
+    }
+
+    const profile = await getUserProfile(ctx.from.id);
+    const balance = Number(profile.balance) || 0;
+
+    await ctx.reply(
+      `💰 *Withdraw Saldo*\n\n` +
+        `Saldo Anda: \`Rp ${balance.toLocaleString("id-ID")}\`\n\n` +
+        `Pilih opsi di bawah:`,
+      {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("💸 WD Now", "wd:now")],
+          [Markup.button.callback("📋 Cek Riwayat WD", "wd:history")],
+        ]),
+      },
+    );
+  });
+
+  bot.hears("💸 Withdraw", async (ctx) => {
     const { wdSessions } = await import("./state.js");
 
     if (wdSessions.has(ctx.from.id)) {
