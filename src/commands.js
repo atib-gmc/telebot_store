@@ -344,7 +344,6 @@ Pilih command di bawah ini:
 
   bot.action(/^admin:wd:filter:(all|pending|approved|rejected)$/, async (ctx) => {
     const filter = ctx.match[1];
-    const editable = filter === "pending";
 
     try {
       const withdrawals = await getAllWithdrawals(filter);
@@ -380,11 +379,22 @@ Pilih command di bawah ini:
 
       let actionButtons = [];
 
-      if (editable) {
+      if (filter === "pending") {
         actionButtons = withdrawals.map((wd) => {
           return [
             Markup.button.callback(`✅ Approve #${wd.id}`, `admin:wd:approve:${wd.id}`),
             Markup.button.callback(`❌ Reject #${wd.id}`, `admin:wd:reject:${wd.id}`),
+          ];
+        });
+      } else if (filter === "all") {
+        actionButtons = withdrawals.map((wd) => {
+          const statusEmoji =
+            wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
+          return [
+            Markup.button.callback(
+              `#${wd.id} ${statusEmoji} Rp ${Number(wd.amount).toLocaleString("id-ID")}`,
+              `admin:wd:view:${wd.id}`,
+            ),
           ];
         });
       }
@@ -471,6 +481,61 @@ Pilih command di bawah ini:
         `Ketik /cancel untuk batal.`,
       { parse_mode: "Markdown" },
     );
+  });
+
+  bot.action(/^admin:wd:view:(\d+)$/, async (ctx) => {
+    const withdrawalId = parseInt(ctx.match[1]);
+
+    try {
+      const allWithdrawals = await getAllWithdrawals();
+      const wd = allWithdrawals.find((w) => w.id === withdrawalId);
+
+      if (!wd) {
+        return ctx.answerCbQuery("❌ Withdrawal tidak ditemukan.");
+      }
+
+      const statusEmoji =
+        wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
+      const date = new Date(wd.created_at).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      let message =
+        `💳 *Detail Withdrawal #${wd.id}*\n\n` +
+        `• Status: ${statusEmoji} *${wd.status}*\n` +
+        `• Bank: \`${wd.bank_name}\`\n` +
+        `• A/N: \`${wd.account_name}\`\n` +
+        `• No: \`${wd.account_number}\`\n` +
+        `• Amount: \`Rp ${Number(wd.amount).toLocaleString("id-ID")}\`\n` +
+        `• Tanggal: \`${date}\`\n`;
+
+      if (wd.note) {
+        message += `• Catatan: \`${wd.note}\`\n`;
+      }
+
+      let actionButtons = [];
+
+      if (wd.status === "pending") {
+        actionButtons.push([
+          Markup.button.callback("✅ Approve", `admin:wd:approve:${wd.id}`),
+          Markup.button.callback("❌ Reject", `admin:wd:reject:${wd.id}`),
+        ]);
+      }
+
+      actionButtons.push([Markup.button.callback("🔙 Kembali", "admin:wd:filter:all")]);
+
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard(actionButtons).reply_markup,
+      });
+    } catch (err) {
+      console.error("Error viewing withdrawal:", err);
+      await ctx.answerCbQuery("❌ Gagal memuat detail withdrawal.");
+    }
   });
 
   // Handle callback dari tombol approve/reject
