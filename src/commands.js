@@ -14,7 +14,11 @@ import {
 import { userData, adminSessions } from "./state.js";
 
 function buildMainMenu() {
-  return Markup.keyboard([["/setor"], ["/wd"], ["/cancel"], ["/myprofile"], ["/menu"]]).resize();
+  return Markup.keyboard([
+    ["/setor 📥", "/wd 💸"],
+    ["/myprofile 👤", "/menu 📋"],
+    ["/cancel ❌"],
+  ]).resize();
 }
 
 export function registerCommands(bot) {
@@ -42,11 +46,10 @@ Pilih command di bawah ini:
   bot.command("menu", async (ctx) => {
     await ctx.reply(
       `📋 *Menu Utama*\n\n` +
-        `/setor — Setor email\n` +
-        `/wd — Withdraw saldo\n` +
-        `/cancel — Batalkan proses\n` +
-        `/myprofile — Lihat profil dan saldo Anda\n` +
-        `/menu — Tampilkan menu ini`,
+        `📥 Setor — Setor email\n` +
+        `💸 Withdraw — Tarik saldo\n` +
+        `👤 My Profile — Lihat profil & saldo\n` +
+        `❌ Cancel — Batalkan proses`,
       {
         parse_mode: "Markdown",
         ...buildMainMenu(),
