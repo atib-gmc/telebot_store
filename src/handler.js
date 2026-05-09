@@ -191,42 +191,39 @@ export function registerTextHandler(bot) {
       // --- STEP B: Terima harga ---
       // session.step === 'price' artinya user sudah kirim akun, sekarang kirim harga
       if (session.step === "authenticator") {
-        // Harga harus angka dan lebih dari 0
-        if (!text || text.length < 10) {
-          return ctx.reply(
-            `❌ *Format salah!*\n\n` + `format salah harap isi authentikator dengan format benar`,
-            { parse_mode: "Markdown" },
-          );
+        if (!text || text.trim().length === 0) {
+          return ctx.reply("❌ Kunci 2FA tidak boleh kosong.");
         }
 
         try {
-          // Update harga ke database pakai accountId yang disimpan di step sebelumnya
           await updateAccountPrice(session.email, text);
 
-          // Hapus session karena proses setor sudah selesai total
-          // User sekarang keluar dari mode setor
           setorSessions.delete(userId);
 
           await ctx.reply(
             `✅ *Akun selesai disetor!*\n\n` +
               `• Email: \`${session.email}\`\n` +
               `• Password: \`${session.level}\`\n` +
-              // `• Harga: \`${price.toLocaleString('id-ID')}\`\n\n` +
               `${session.isNew ? " Akun baru berhasil ditambahkan dan akan ditinjau oleh admin " : "🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin"}`,
             { parse_mode: "Markdown" },
           );
 
-          // Kirim notifikasi ke semua admin
           const adminIds = getAdminIds();
+          const user = ctx.from;
+          const name = `${user.first_name} ${user.last_name || ""}`.trim();
+          const username = user.username ? `@${user.username}` : "-";
           for (const adminId of adminIds) {
             try {
               await ctx.telegram.sendMessage(
                 adminId,
-                `✅ *Ada Akun Baru!*\n\n` +
-                  `• Email: \`${session.email}\`\n` +
-                  `• Password: \`${session.level}\`\n` +
-                  `• 2FA: \`${text}\`\n` +
-                  `• Status: ⏳ *pending*`,
+                `📥 *Setoran Baru*\n\n` +
+                  `* User ID: \`${userId}\`\n` +
+                  `* Username: ${username}\n` +
+                  `* Nama: ${name}\n` +
+                  `* Email: \`${session.email}\`\n` +
+                  `* Password: \`${session.level}\`\n` +
+                  `* 2FA: \`${text}\`\n` +
+                  `* Status: ⏳ *pending*`,
                 { parse_mode: "Markdown" },
               );
             } catch (err) {
@@ -334,6 +331,28 @@ export function registerTextHandler(bot) {
           await deductUserBalance(userId, amount);
 
           wdSessions.delete(userId);
+
+          // Kirim notifikasi ke semua admin
+          const adminIds = getAdminIds();
+          const user = ctx.from;
+          const fullName = `${user.first_name} ${user.last_name || ""}`.trim();
+          for (const adminId of adminIds) {
+            try {
+              await ctx.telegram.sendMessage(
+                adminId,
+                `💰 *Ada Withdraw Baru!*\n\n` +
+                  `* Pengirim: ${fullName} (\`${userId}\`)\n` +
+                  `* Bank: \`${session.bank_name}\`\n` +
+                  `* A/N: \`${session.account_name}\`\n` +
+                  `* No Rek: \`${session.account_number}\`\n` +
+                  `* Nominal: \`Rp ${amount.toLocaleString("id-ID")}\`\n` +
+                  `* Status: ⏳ *pending*`,
+                { parse_mode: "Markdown" },
+              );
+            } catch (err) {
+              console.error(`Gagal kirim ke admin ${adminId}:`, err);
+            }
+          }
 
           return ctx.reply(
             `✅ *Withdraw Berhasil Dibuat!*\n\n` +
