@@ -9,6 +9,7 @@ import {
   getUserProfile,
   updateWithdrawalStatus,
   getAllUsers,
+  getAdminIds,
 } from "./database.js";
 import { userData, setorSessions, wdSessions, adminSessions } from "./state.js";
 
@@ -165,10 +166,11 @@ export function registerTextHandler(bot) {
           // Update session ke step berikutnya
           // Sekarang session tau: user sudah kirim akun, tinggal tanya harga
           setorSessions.set(userId, {
-            step: "authenticator", // pindah ke step harga
+            step: "authenticator",
             email,
-            level: level, // simpan password untuk nanti
-            isNew: data.isNew, // flag: akun baru atau update
+            level: level,
+            isNew: data.isNew,
+            msgId: ctx.message.message_id,
           });
 
           await ctx.reply(
@@ -213,6 +215,24 @@ export function registerTextHandler(bot) {
               `${session.isNew ? " Akun baru berhasil ditambahkan dan akan ditinjau oleh admin " : "🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin"}`,
             { parse_mode: "Markdown" },
           );
+
+          // Kirim notifikasi ke semua admin
+          const adminIds = getAdminIds();
+          for (const adminId of adminIds) {
+            try {
+              await ctx.telegram.sendMessage(
+                adminId,
+                `✅ *Ada Akun Baru!*\n\n` +
+                  `• Email: \`${session.email}\`\n` +
+                  `• Password: \`${session.level}\`\n` +
+                  `• 2FA: \`${text}\`\n` +
+                  `• Status: ⏳ *pending*`,
+                { parse_mode: "Markdown" },
+              );
+            } catch (err) {
+              console.error(`Gagal kirim ke admin ${adminId}:`, err);
+            }
+          }
         } catch (err) {
           console.error("Error:", err);
           return ctx.reply("❌ Gagal menyimpan harga. Coba lagi.");

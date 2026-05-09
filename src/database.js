@@ -121,13 +121,16 @@ export async function getUserGameAccounts(userId) {
   return data || [];
 }
 
-// ===== Cek apakah user adalah admin =====
-export function isAdmin(userId) {
-  const adminIds = [process.env.ADMIN_ID_1, process.env.ADMIN_ID_2]
+// ===== Ambil daftar ID admin =====
+export function getAdminIds() {
+  return [process.env.ADMIN_ID_1, process.env.ADMIN_ID_2, process.env.ADMIN_ID_3]
     .filter(Boolean)
     .map((id) => parseInt(id));
+}
 
-  return adminIds.includes(userId);
+// ===== Cek apakah user adalah admin =====
+export function isAdmin(userId) {
+  return getAdminIds().includes(userId);
 }
 
 // ===== Ambil semua game accounts =====
