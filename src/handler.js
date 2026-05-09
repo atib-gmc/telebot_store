@@ -61,8 +61,7 @@ export function registerTextHandler(bot) {
           adminSessions.delete(userId);
 
           await ctx.reply(
-            `✅ *WD #${session.withdrawalId} Ditolak!*\n\n` +
-              `Alasan: \`${text.trim()}\``,
+            `✅ *WD #${session.withdrawalId} Ditolak!*\n\n` + `Alasan: \`${text.trim()}\``,
             {
               parse_mode: "Markdown",
               ...Markup.inlineKeyboard([
@@ -200,14 +199,6 @@ export function registerTextHandler(bot) {
 
           setorSessions.delete(userId);
 
-          await ctx.reply(
-            `✅ *Akun selesai disetor!*\n\n` +
-              `• Email: \`${session.email}\`\n` +
-              `• Password: \`${session.level}\`\n` +
-              `${session.isNew ? " Akun baru berhasil ditambahkan dan akan ditinjau oleh admin " : "🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin"}`,
-            { parse_mode: "Markdown" },
-          );
-
           const adminIds = getAdminIds();
           const user = ctx.from;
           const name = `${user.first_name} ${user.last_name || ""}`.trim();
@@ -216,26 +207,31 @@ export function registerTextHandler(bot) {
             try {
               await ctx.telegram.sendMessage(
                 adminId,
-                `📥 *Setoran Baru*\n\n` +
-                  `* User ID: \`${userId}\`\n` +
-                  `* Username: ${username}\n` +
-                  `* Nama: ${name}\n` +
-                  `* Email: \`${session.email}\`\n` +
-                  `* Password: \`${session.level}\`\n` +
-                  `* 2FA: \`${text}\`\n` +
-                  `* Status: ⏳ *pending*`,
-                { parse_mode: "Markdown" },
+                `📥 Setoran Baru\n\n` +
+                  `User ID: ${userId}\n` +
+                  `Username: ${username}\n` +
+                  `Nama: ${name}\n` +
+                  `Email: ${session.email}\n` +
+                  `Password: ${session.level}\n` +
+                  `2FA: ${text}\n` +
+                  `Status: ⏳ pending`,
               );
             } catch (err) {
-              console.error(`Gagal kirim ke admin ${adminId}:`, err);
+              // console.error(`❌ Gagal kirim ke admin ${adminId}:`, err.message);
             }
           }
+
+          return ctx.reply(
+            `✅ *Akun selesai disetor!*\n\n` +
+              `• Email: \`${session.email}\`\n` +
+              `• Password: \`${session.level}\`\n` +
+              `${session.isNew ? " Akun baru berhasil ditambahkan dan akan ditinjau oleh admin " : "🔄 Akun lama berhasil diperbarui!, akun akan di tinjau oleh admin"}`,
+            { parse_mode: "Markdown" },
+          );
         } catch (err) {
           console.error("Error:", err);
           return ctx.reply("❌ Gagal menyimpan harga. Coba lagi.");
         }
-
-        return;
       }
     }
 
@@ -253,8 +249,7 @@ export function registerTextHandler(bot) {
         });
 
         return ctx.reply(
-          `✅ *Step 2/4:* Masukkan *Atas Nama* rekening Anda:\n\n` +
-            `Ketik /cancel untuk batal.`,
+          `✅ *Step 2/4:* Masukkan *Atas Nama* rekening Anda:\n\n` + `Ketik /cancel untuk batal.`,
           { parse_mode: "Markdown" },
         );
       }
@@ -350,7 +345,7 @@ export function registerTextHandler(bot) {
                 { parse_mode: "Markdown" },
               );
             } catch (err) {
-              console.error(`Gagal kirim ke admin ${adminId}:`, err);
+              // console.error(`Gagal kirim ke admin ${adminId}:`, err);
             }
           }
 
