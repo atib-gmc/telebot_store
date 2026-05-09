@@ -63,33 +63,121 @@ Pilih command di bawah ini:
       const balance = profile.balance ? Number(profile.balance).toLocaleString("id-ID") : "0";
       const totalEmails = accounts.length;
 
-      let accountList = "";
-      if (totalEmails > 0) {
-        accountList = accounts
-          .map((acc, i) => {
-            const statusEmoji =
-              acc.status === "pending" ? "⏳" : acc.status === "approved" ? "✅" : "❌";
-            return `${i + 1}. \`${acc.email}\` — ${statusEmoji} *${acc.status}*`;
-          })
-          .join("\n");
-      } else {
-        accountList = "_Belum ada akun disetor_";
-      }
-
       await ctx.reply(
         `👤 *Profil Anda*\n\n` +
           `• Nama: \`${profile.name}\`\n` +
           `• Username: \`${profile.username ? "@" + profile.username : "Tidak ada"}\`\n` +
           `• Saldo: \`Rp ${balance}\`\n` +
-          `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString("id-ID")}\`\n\n` +
-          `📧 *Total Email (${totalEmails})*\n\n` +
-          `| Email | Status |\n` +
-          accountList,
-        { parse_mode: "Markdown" },
+          `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString("id-ID")}\`\n` +
+          `• Total Email: \`${totalEmails}\``,
+        {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("📧 Riwayat Email", "profile:emails")],
+            [Markup.button.callback("💳 Riwayat WD", "profile:wd")],
+          ]),
+        },
       );
     } catch (err) {
       console.error("Error fetching profile:", err);
       await ctx.reply("❌ Gagal mengambil data profil. Coba lagi.");
+    }
+  });
+
+  bot.action("profile:emails", async (ctx) => {
+    try {
+      const accounts = await getUserGameAccounts(ctx.from.id);
+
+      if (accounts.length === 0) {
+        return ctx.answerCbQuery("📭 Belum ada email yang disetor.");
+      }
+
+      let message = `📧 *Riwayat Email*\n\n`;
+      accounts.forEach((acc, i) => {
+        const statusEmoji =
+          acc.status === "pending" ? "⏳" : acc.status === "approved" ? "✅" : "❌";
+        message += `${i + 1}. \`${acc.email}\` — ${statusEmoji} *${acc.status}*\n`;
+      });
+
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback("🔙 Kembali", "myprofile:back")],
+        ]).reply_markup,
+      });
+    } catch (err) {
+      console.error("Error fetching email history:", err);
+      await ctx.answerCbQuery("❌ Gagal memuat riwayat email.");
+    }
+  });
+
+  bot.action("profile:wd", async (ctx) => {
+    try {
+      const history = await getUserWithdrawalHistory(ctx.from.id);
+
+      if (history.length === 0) {
+        return ctx.answerCbQuery("📭 Belum ada riwayat withdraw.");
+      }
+
+      let message = `💳 *Riwayat Withdraw*\n\n`;
+      history.forEach((wd, i) => {
+        const statusEmoji =
+          wd.status === "pending" ? "⏳" : wd.status === "approved" ? "✅" : "❌";
+        const date = new Date(wd.created_at).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        message +=
+          `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n` +
+          `Bank: \`${wd.bank_name}\` | A/n: \`${wd.account_name}\`\n` +
+          `No: \`${wd.account_number}\` | Rp ${Number(wd.amount).toLocaleString("id-ID")}\n` +
+          `Tanggal: \`${date}\`\n`;
+        if (wd.status === "rejected" && wd.note) {
+          message += `Alasan: \`${wd.note}\`\n`;
+        }
+        message += `\n`;
+      });
+
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback("🔙 Kembali", "myprofile:back")],
+        ]).reply_markup,
+      });
+    } catch (err) {
+      console.error("Error fetching withdrawal history:", err);
+      await ctx.answerCbQuery("❌ Gagal memuat riwayat withdraw.");
+    }
+  });
+
+  bot.action("myprofile:back", async (ctx) => {
+    try {
+      const profile = await getUserProfile(ctx.from.id);
+      const accounts = await getUserGameAccounts(ctx.from.id);
+      const balance = profile.balance ? Number(profile.balance).toLocaleString("id-ID") : "0";
+      const totalEmails = accounts.length;
+
+      await ctx.editMessageText(
+        `👤 *Profil Anda*\n\n` +
+          `• Nama: \`${profile.name}\`\n` +
+          `• Username: \`${profile.username ? "@" + profile.username : "Tidak ada"}\`\n` +
+          `• Saldo: \`Rp ${balance}\`\n` +
+          `• Terdaftar sejak: \`${new Date(profile.created_at).toLocaleDateString("id-ID")}\`\n` +
+          `• Total Email: \`${totalEmails}\``,
+        {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("📧 Riwayat Email", "profile:emails")],
+            [Markup.button.callback("💳 Riwayat WD", "profile:wd")],
+          ]),
+        },
+      );
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      await ctx.answerCbQuery("❌ Gagal memuat profil.");
     }
   });
 
@@ -205,7 +293,11 @@ Pilih command di bawah ini:
 
       message += `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n`;
       message += `Nominal: \`Rp ${Number(wd.amount).toLocaleString("id-ID")}\`\n`;
-      message += `Tanggal: \`${date}\`\n\n`;
+      message += `Tanggal: \`${date}\`\n`;
+      if (wd.status === "rejected" && wd.note) {
+        message += `Alasan: \`${wd.note}\`\n`;
+      }
+      message += `\n`;
     });
 
     await ctx.editMessageText(message, {
@@ -261,6 +353,7 @@ Pilih command di bawah ini:
 
   // Handle filter callback
   bot.action(/^admin:filter:(all|pending|approved|rejected)$/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const filter = ctx.match[1];
     const editable = filter === "all" || filter === "pending";
 
@@ -313,6 +406,7 @@ Pilih command di bawah ini:
 
   // Handle back to menu
   bot.action("admin:back", async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const buttons = Markup.inlineKeyboard([
       [Markup.button.callback("📋 Semua Email", "admin:filter:all")],
       [Markup.button.callback("⏳ Pending", "admin:filter:pending")],
@@ -330,6 +424,7 @@ Pilih command di bawah ini:
   // ===== ADMIN WITHDRAWALS =====
 
   bot.action("admin:wd", async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const buttons = Markup.inlineKeyboard([
       [Markup.button.callback("📋 Semua WD", "admin:wd:filter:all")],
       [Markup.button.callback("⏳ Pending", "admin:wd:filter:pending")],
@@ -345,6 +440,7 @@ Pilih command di bawah ini:
   });
 
   bot.action(/^admin:wd:filter:(all|pending|approved|rejected)$/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const filter = ctx.match[1];
 
     try {
@@ -376,7 +472,11 @@ Pilih command di bawah ini:
           `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n` +
           `Bank: \`${wd.bank_name}\` | A/n: \`${wd.account_name}\`\n` +
           `No: \`${wd.account_number}\` | Rp ${Number(wd.amount).toLocaleString("id-ID")}\n` +
-          `Tanggal: \`${date}\`\n\n`;
+          `Tanggal: \`${date}\`\n`;
+        if (wd.status === "rejected" && wd.note) {
+          message += `Alasan: \`${wd.note}\`\n`;
+        }
+        message += `\n`;
       });
 
       let actionButtons = [];
@@ -405,6 +505,7 @@ Pilih command di bawah ini:
   });
 
   bot.action(/^admin:wd:approve:(\d+)$/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const withdrawalId = parseInt(ctx.match[1]);
 
     try {
@@ -428,7 +529,11 @@ Pilih command di bawah ini:
           `*#${wd.id}* | ${statusEmoji} *${wd.status}*\n` +
           `Bank: \`${wd.bank_name}\` | A/n: \`${wd.account_name}\`\n` +
           `No: \`${wd.account_number}\` | Rp ${Number(wd.amount).toLocaleString("id-ID")}\n` +
-          `Tanggal: \`${date}\`\n\n`;
+          `Tanggal: \`${date}\`\n`;
+        if (wd.status === "rejected" && wd.note) {
+          message += `Alasan: \`${wd.note}\`\n`;
+        }
+        message += `\n`;
       });
 
       const actionButtons = all
@@ -453,6 +558,7 @@ Pilih command di bawah ini:
   });
 
   bot.action(/^admin:wd:reject:(\d+)$/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const withdrawalId = parseInt(ctx.match[1]);
 
     adminSessions.set(ctx.from.id, {
@@ -471,6 +577,7 @@ Pilih command di bawah ini:
   });
 
   bot.action(/^admin:wd:view:(\d+)$/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const withdrawalId = parseInt(ctx.match[1]);
 
     try {
@@ -527,6 +634,7 @@ Pilih command di bawah ini:
 
   // Handle callback dari tombol approve/reject
   bot.action(/^admin:(approve|reject):(.+)$/, async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Akses ditolak.");
     const [, action, accountId] = ctx.match;
     const status = action === "approve" ? "approved" : "rejected";
     const userId = ctx.from.id;
